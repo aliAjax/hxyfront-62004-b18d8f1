@@ -70,8 +70,43 @@ class WorkOrderStore {
 
   private debounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private readonly DEBOUNCE_MS = 200;
+  private pendingWrites: Map<string, unknown> = new Map();
 
-  private constructor() {}
+  private constructor() {
+    this.setupBeforeUnloadHandler();
+  }
+
+  private setupBeforeUnloadHandler(): void {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', () => {
+        this.flushPendingWrites();
+      });
+
+      if ('visibilitychange' in document) {
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'hidden') {
+            this.flushPendingWrites();
+          }
+        });
+      }
+    }
+  }
+
+  private flushPendingWrites(): void {
+    this.debounceTimers.forEach((timer) => clearTimeout(timer));
+    this.debounceTimers.clear();
+
+    this.pendingWrites.forEach((value, key) => {
+      try {
+        storage.set(key, value).catch((e) => {
+          console.error(`[Store] Flush write failed for ${key}:`, e);
+        });
+      } catch (e) {
+        console.error(`[Store] Flush write error for ${key}:`, e);
+      }
+    });
+    this.pendingWrites.clear();
+  }
 
   static getInstance(): WorkOrderStore {
     if (!WorkOrderStore.instance) {
@@ -157,7 +192,23 @@ class WorkOrderStore {
     return this.initialized;
   }
 
+  private persistImmediate(key: string, value: unknown): void {
+    const existingTimer = this.debounceTimers.get(key);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      this.debounceTimers.delete(key);
+    }
+    this.pendingWrites.delete(key);
+
+    storage.set(key, value).catch((e) => {
+      console.error(`[Store] Immediate persist failed for ${key}:`, e);
+      this.emit('store:error', e);
+    });
+  }
+
   private schedulePersist(key: string, value: unknown): void {
+    this.pendingWrites.set(key, value);
+
     const existingTimer = this.debounceTimers.get(key);
     if (existingTimer) {
       clearTimeout(existingTimer);
@@ -167,10 +218,11 @@ class WorkOrderStore {
       key,
       setTimeout(() => {
         storage.set(key, value).catch((e) => {
-          console.error(`[Store] Persist failed for ${key}:`, e);
+          console.error(`[Store] Debounced persist failed for ${key}:`, e);
           this.emit('store:error', e);
         });
         this.debounceTimers.delete(key);
+        this.pendingWrites.delete(key);
       }, this.DEBOUNCE_MS)
     );
   }
@@ -239,7 +291,7 @@ class WorkOrderStore {
     };
 
     this.workOrders = [newOrder, ...this.workOrders];
-    this.schedulePersist(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
+    this.persistImmediate(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
     this.emit('workOrders:changed', this.getWorkOrders());
 
     return newOrder;
@@ -253,7 +305,7 @@ class WorkOrderStore {
     this.workOrders[index] = updated;
     this.workOrders = [...this.workOrders];
 
-    this.schedulePersist(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
+    this.persistImmediate(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
     this.emit('workOrders:changed', this.getWorkOrders());
 
     return updated;
@@ -268,8 +320,8 @@ class WorkOrderStore {
 
     this.assignments = this.assignments.filter((a) => a.workOrderId !== id);
 
-    this.schedulePersist(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
-    this.schedulePersist(STORAGE_KEYS.ASSIGNMENTS, this.assignments);
+    this.persistImmediate(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
+    this.persistImmediate(STORAGE_KEYS.ASSIGNMENTS, this.assignments);
     this.emit('workOrders:changed', this.getWorkOrders());
     this.emit('assignments:changed', this.getAssignments());
 
@@ -314,11 +366,11 @@ class WorkOrderStore {
     if (targetStatus === 'delivered') {
       this.syncOrderToCustomerHistory(updated);
       this.assignments = this.assignments.filter((a) => a.workOrderId !== orderId);
-      this.schedulePersist(STORAGE_KEYS.ASSIGNMENTS, this.assignments);
+      this.persistImmediate(STORAGE_KEYS.ASSIGNMENTS, this.assignments);
       this.emit('assignments:changed', this.getAssignments());
     }
 
-    this.schedulePersist(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
+    this.persistImmediate(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
     this.emit('workOrders:changed', this.getWorkOrders());
 
     return updated;
@@ -359,7 +411,7 @@ class WorkOrderStore {
     this.workOrders[index] = updated;
     this.workOrders = [...this.workOrders];
 
-    this.schedulePersist(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
+    this.persistImmediate(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
     this.emit('workOrders:changed', this.getWorkOrders());
 
     return updated;
@@ -382,7 +434,7 @@ class WorkOrderStore {
     this.workOrders[index] = updated;
     this.workOrders = [...this.workOrders];
 
-    this.schedulePersist(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
+    this.persistImmediate(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
     this.emit('workOrders:changed', this.getWorkOrders());
 
     return updated;
@@ -401,7 +453,7 @@ class WorkOrderStore {
     this.workOrders[index] = updated;
     this.workOrders = [...this.workOrders];
 
-    this.schedulePersist(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
+    this.persistImmediate(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
     this.emit('workOrders:changed', this.getWorkOrders());
 
     return updated;
@@ -418,7 +470,7 @@ class WorkOrderStore {
     this.workOrders[index] = updated;
     this.workOrders = [...this.workOrders];
 
-    this.schedulePersist(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
+    this.persistImmediate(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
     this.emit('workOrders:changed', this.getWorkOrders());
 
     return checklist;
@@ -437,7 +489,7 @@ class WorkOrderStore {
       this.syncOrderToCustomerHistory(updated);
     }
 
-    this.schedulePersist(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
+    this.persistImmediate(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
     this.emit('workOrders:changed', this.getWorkOrders());
 
     return updated;
@@ -452,7 +504,7 @@ class WorkOrderStore {
     this.workOrders[index] = updated;
     this.workOrders = [...this.workOrders];
 
-    this.schedulePersist(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
+    this.persistImmediate(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
     this.emit('workOrders:changed', this.getWorkOrders());
 
     return updated;
@@ -496,7 +548,7 @@ class WorkOrderStore {
       this.customerHistory = [historyRecord, ...next];
     }
 
-    this.schedulePersist(STORAGE_KEYS.CUSTOMER_HISTORY, this.customerHistory);
+    this.persistImmediate(STORAGE_KEYS.CUSTOMER_HISTORY, this.customerHistory);
     this.emit('customerHistory:changed', this.getCustomerHistory());
   }
 
@@ -554,7 +606,7 @@ class WorkOrderStore {
     };
 
     this.customerHistory = [newRecord, ...this.customerHistory];
-    this.schedulePersist(STORAGE_KEYS.CUSTOMER_HISTORY, this.customerHistory);
+    this.persistImmediate(STORAGE_KEYS.CUSTOMER_HISTORY, this.customerHistory);
     this.emit('customerHistory:changed', this.getCustomerHistory());
 
     return newRecord;
@@ -572,7 +624,7 @@ class WorkOrderStore {
     this.technicians[index] = updated;
     this.technicians = [...this.technicians];
 
-    this.schedulePersist(STORAGE_KEYS.TECHNICIANS, this.technicians);
+    this.persistImmediate(STORAGE_KEYS.TECHNICIANS, this.technicians);
     this.emit('technicians:changed', this.getTechnicians());
 
     return updated;
@@ -589,7 +641,7 @@ class WorkOrderStore {
     };
 
     this.assignments = [...this.assignments, newAssignment];
-    this.schedulePersist(STORAGE_KEYS.ASSIGNMENTS, this.assignments);
+    this.persistImmediate(STORAGE_KEYS.ASSIGNMENTS, this.assignments);
     this.emit('assignments:changed', this.getAssignments());
 
     return newAssignment;
@@ -616,7 +668,7 @@ class WorkOrderStore {
     this.assignments[index] = updated;
     this.assignments = [...this.assignments];
 
-    this.schedulePersist(STORAGE_KEYS.ASSIGNMENTS, this.assignments);
+    this.persistImmediate(STORAGE_KEYS.ASSIGNMENTS, this.assignments);
     this.emit('assignments:changed', this.getAssignments());
 
     return updated;
@@ -629,7 +681,7 @@ class WorkOrderStore {
     this.assignments.splice(index, 1);
     this.assignments = [...this.assignments];
 
-    this.schedulePersist(STORAGE_KEYS.ASSIGNMENTS, this.assignments);
+    this.persistImmediate(STORAGE_KEYS.ASSIGNMENTS, this.assignments);
     this.emit('assignments:changed', this.getAssignments());
 
     return true;
@@ -654,6 +706,8 @@ class WorkOrderStore {
   }
 
   downloadJSON(filename?: string): void {
+    this.flushPendingWrites();
+
     const data = this.exportToJSON();
     const blob = new Blob([data], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
