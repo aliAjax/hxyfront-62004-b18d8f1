@@ -11,11 +11,8 @@ import ScheduleAndDispatch from './ScheduleAndDispatch';
 import {
   WorkOrder,
   WorkOrderFormData,
-  initialWorkOrders,
   EdgeAngleParam,
-  initialEdgeAngleParams,
   CustomerHistoryRecord,
-  initialCustomerHistory,
   WorkOrderStatus,
   StatusHistoryRecord,
   STATUS_CONFIG,
@@ -26,12 +23,23 @@ import {
   hasQualityCheckFailedItems,
   Technician,
   WorkOrderAssignment,
-  initialTechnicians,
-  initialAssignments,
   TechnicianStatus,
   SKILL_LEVEL_CONFIG,
+  emptyFormData,
 } from './types';
 import QualityChecklistPanel from './QualityChecklistPanel';
+import {
+  useStoreInitialized,
+  useWorkOrders,
+  useCustomerHistory,
+  useEdgeParams,
+  useTechnicians,
+  useAssignments,
+  useWorkOrderActions,
+  useAssignmentActions,
+  useTechnicianActions,
+  useDataIO,
+} from './store/hooks';
 
 const project = {
   sourceNo: 6,
@@ -46,12 +54,21 @@ const project = {
 };
 
 function App() {
-  const [orders, setOrders] = useState<WorkOrder[]>(initialWorkOrders);
+  const initialized = useStoreInitialized();
+  const orders = useWorkOrders();
+  const customerHistory = useCustomerHistory();
+  const edgeParams = useEdgeParams();
+  const technicians = useTechnicians();
+  const assignments = useAssignments();
+
+  const orderActions = useWorkOrderActions();
+  const assignmentActions = useAssignmentActions();
+  const technicianActions = useTechnicianActions();
+  const dataIO = useDataIO();
+
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | WorkOrderStatus>('all');
   const [selectedEdgeParam, setSelectedEdgeParam] = useState<EdgeAngleParam | null>(null);
-  const [edgeParams] = useState<EdgeAngleParam[]>(initialEdgeAngleParams);
-  const [customerHistory, setCustomerHistory] = useState<CustomerHistoryRecord[]>(initialCustomerHistory);
   const [selectedHistoryRecord, setSelectedHistoryRecord] = useState<CustomerHistoryRecord | null>(null);
   const [editingOrder, setEditingOrder] = useState<WorkOrder | null>(null);
   const [selectedHistoryOrder, setSelectedHistoryOrder] = useState<WorkOrder | null>(null);
@@ -59,60 +76,14 @@ function App() {
   const [quoteTargetOrderId, setQuoteTargetOrderId] = useState<string | null>(null);
   const quoteSectionRef = useRef<HTMLDivElement>(null);
   const qaSectionRef = useRef<HTMLDivElement>(null);
-
-  const [technicians, setTechnicians] = useState<Technician[]>(initialTechnicians);
-  const [assignments, setAssignments] = useState<WorkOrderAssignment[]>(initialAssignments);
-
-  const getNextOrderId = () => {
-    let maxNum = 0;
-    orders.forEach((order) => {
-      const match = order.id.match(/ORD-(\d+)/);
-      if (match) {
-        const num = parseInt(match[1], 10);
-        if (num > maxNum) maxNum = num;
-      }
-    });
-    return `ORD-${maxNum + 1}`;
-  };
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (formData: WorkOrderFormData, editingId?: string) => {
     if (editingId) {
-      setOrders((prev) =>
-        prev.map((order) =>
-          order.id === editingId
-            ? { ...order, ...formData }
-            : order
-        )
-      );
+      orderActions.update(editingId, formData);
       setEditingOrder(null);
     } else {
-      const today = new Date();
-      const deliveryDate = new Date(today);
-      deliveryDate.setDate(today.getDate() + 3);
-      const estimatedDelivery = deliveryDate.toISOString().split('T')[0];
-
-      const now = new Date();
-      const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-      const newOrder: WorkOrder = {
-        ...formData,
-        id: getNextOrderId(),
-        status: 'pending_inspection',
-        createdAt: today.toISOString().split('T')[0],
-        estimatedDelivery,
-        riskWarning: '',
-        damageMarks: formData.damageMarks || [],
-        statusHistory: [
-          {
-            id: `SH-${getNextOrderId()}-${Date.now()}`,
-            fromStatus: null,
-            toStatus: 'pending_inspection',
-            timestamp,
-            note: '工单创建',
-          },
-        ],
-      };
-      setOrders([newOrder, ...orders]);
+      orderActions.create(formData);
     }
     setSelectedHistoryRecord(null);
   };
@@ -123,99 +94,16 @@ function App() {
   };
 
   const handleToggleStatus = (orderId: string) => {
-    const currentOrder = orders.find((order) => order.id === orderId);
-    if (!currentOrder) return;
-
-    const statusOrder: WorkOrderStatus[] = [
-      'pending_inspection',
-      'pending_wax',
-      'pending_base_repair',
-      'pending_qa',
-      'delivered',
-    ];
-    const currentIndex = statusOrder.indexOf(currentOrder.status);
-    const nextIndex = (currentIndex + 1) % statusOrder.length;
-    const nextStatus = statusOrder[nextIndex];
-
-    if (nextStatus === 'delivered') {
-      if (!currentOrder.qualityChecklist) {
-        alert('请先完成质检检查清单后再交付');
-        return;
-      }
-      if (hasQualityCheckFailedItems(currentOrder.qualityChecklist)) {
-        alert('质检存在不通过项，无法交付。请先修复所有不通过项后再尝试交付。');
-        return;
-      }
-      if (!isQualityCheckCompleted(currentOrder.qualityChecklist)) {
-        alert('请先完成所有质检项并确保全部通过后再交付');
-        return;
-      }
-    }
-
-    const now = new Date();
-    const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const targetLabel = STATUS_CONFIG.find((s) => s.value === nextStatus)?.label ?? nextStatus;
-    const newHistoryRecord: StatusHistoryRecord = {
-      id: `SH-${currentOrder.id}-${Date.now()}`,
-      fromStatus: currentOrder.status,
-      toStatus: nextStatus,
-      timestamp,
-      note: `移至${targetLabel}`,
-    };
-    const updatedOrder: WorkOrder = {
-      ...currentOrder,
-      status: nextStatus,
-      statusHistory: [...currentOrder.statusHistory, newHistoryRecord],
-    };
-
-    setOrders((prev) =>
-      prev.map((order) => (order.id === orderId ? updatedOrder : order))
-    );
-
-    if (nextStatus === 'delivered') {
-      syncOrderToCustomerHistory(updatedOrder);
-      const existingAssignment = assignments.find((a) => a.workOrderId === orderId);
-      if (existingAssignment) {
-        handleRemoveAssignment(existingAssignment.id);
-      }
+    const result = orderActions.advanceStatus(orderId);
+    if (selectedQaOrder?.id === orderId && result) {
+      setSelectedQaOrder(result);
     }
   };
 
   const handleMoveOrder = (orderId: string, newStatus: WorkOrderStatus, historyRecord: StatusHistoryRecord) => {
-    const order = orders.find((o) => o.id === orderId);
-    if (!order) return;
-
-    if (newStatus === 'delivered') {
-      if (!order.qualityChecklist) {
-        alert('请先完成质检检查清单后再交付');
-        return;
-      }
-      if (hasQualityCheckFailedItems(order.qualityChecklist)) {
-        alert('质检存在不通过项，无法交付。请先修复所有不通过项后再尝试交付。');
-        return;
-      }
-      if (!isQualityCheckCompleted(order.qualityChecklist)) {
-        alert('请先完成所有质检项并确保全部通过后再交付');
-        return;
-      }
-    }
-
-    const updatedOrder: WorkOrder = {
-      ...order,
-      status: newStatus,
-      statusHistory: [...order.statusHistory, historyRecord],
-    };
-
-    setOrders((prev) =>
-      prev.map((order) => (order.id === orderId ? updatedOrder : order))
-    );
-
-    if (newStatus === 'delivered') {
-      syncOrderToCustomerHistory(updatedOrder);
-      const existingAssignment = assignments.find((a) => a.workOrderId === orderId);
-      if (existingAssignment) {
-        handleRemoveAssignment(existingAssignment.id);
-      }
+    const result = orderActions.transitionStatus(orderId, newStatus, historyRecord.note);
+    if (selectedQaOrder?.id === orderId && result) {
+      setSelectedQaOrder(result);
     }
   };
 
@@ -240,59 +128,8 @@ function App() {
 
   const handleApplyQuote = (summary: QuoteSummary) => {
     if (!quoteTargetOrderId) return;
-    setOrders((prev) =>
-      prev.map((order) =>
-        order.id === quoteTargetOrderId
-          ? { ...order, quoteSummary: summary }
-          : order
-      )
-    );
+    orderActions.applyQuote(quoteTargetOrderId, summary);
     setQuoteTargetOrderId(null);
-  };
-
-  const syncOrderToCustomerHistory = (order: WorkOrder) => {
-    if (!isQualityCheckCompleted(order.qualityChecklist)) return;
-
-    const maintenanceItems = [];
-    if (order.sideEdgeAngle || order.baseEdgeAngle) maintenanceItems.push('修刃');
-    if (order.waxType && order.waxType !== '不打蜡') maintenanceItems.push('打蜡');
-    if (order.baseDamage && order.baseDamage !== '无') maintenanceItems.push('补底');
-    if (order.repairLocation) maintenanceItems.push('修补');
-
-    const now = new Date();
-    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-
-    const historyRecord: CustomerHistoryRecord = {
-      id: `CHR-${order.id}`,
-      customerName: '客户',
-      customerPhone: '',
-      brand: order.brand,
-      length: order.length,
-      boardType: order.boardType,
-      maintenanceItems: maintenanceItems.join('、') || '常规维护',
-      waxType: order.waxType,
-      sideEdgeAngle: order.sideEdgeAngle,
-      baseEdgeAngle: order.baseEdgeAngle,
-      deliveryNote: order.qualityChecklist?.overallNote || '',
-      createdAt: dateStr,
-      qualityChecklist: order.qualityChecklist,
-    };
-
-    setCustomerHistory((prev) => {
-      const existingIndex = prev.findIndex(
-        (record) =>
-          record.id === historyRecord.id ||
-          record.qualityChecklist?.workOrderId === order.id
-      );
-
-      if (existingIndex === -1) {
-        return [historyRecord, ...prev];
-      }
-
-      const next = [...prev];
-      next.splice(existingIndex, 1);
-      return [historyRecord, ...next];
-    });
   };
 
   const handleOpenQaChecklist = (order: WorkOrder) => {
@@ -304,40 +141,22 @@ function App() {
 
   const handleCreateQaChecklist = () => {
     if (!selectedQaOrder) return;
-    const checklist = createEmptyQualityChecklist(selectedQaOrder.id);
-    setOrders((prev) =>
-      prev.map((order) =>
-        order.id === selectedQaOrder.id
-          ? { ...order, qualityChecklist: checklist }
-          : order
-      )
-    );
-    setSelectedQaOrder((prev) =>
-      prev ? { ...prev, qualityChecklist: checklist } : null
-    );
+    const checklist = orderActions.createQualityChecklist(selectedQaOrder.id);
+    if (checklist) {
+      setSelectedQaOrder((prev) => (prev ? { ...prev, qualityChecklist: checklist } : null));
+    }
   };
 
   const handleUpdateQaChecklist = (checklist: QualityChecklist) => {
     if (!selectedQaOrder) return;
-    const currentOrder = orders.find((order) => order.id === selectedQaOrder.id) ?? selectedQaOrder;
-    const updatedOrder: WorkOrder = { ...currentOrder, qualityChecklist: checklist };
-
-    setOrders((prev) =>
-      prev.map((order) =>
-        order.id === selectedQaOrder.id
-          ? updatedOrder
-          : order
-      )
-    );
-    setSelectedQaOrder(updatedOrder);
-
-    if (isQualityCheckCompleted(checklist)) {
-      syncOrderToCustomerHistory(updatedOrder);
+    const updated = orderActions.updateQualityChecklist(selectedQaOrder.id, checklist);
+    if (updated) {
+      setSelectedQaOrder(updated);
     }
   };
 
-  const handleAssignOrder = (assignment: WorkOrderAssignment) => {
-    setAssignments((prev) => [...prev, assignment]);
+  const handleAssignOrder = (assignment: Omit<WorkOrderAssignment, 'id'>) => {
+    assignmentActions.create(assignment);
   };
 
   const handleReassignOrder = (assignmentId: string, newTechnicianId: string) => {
@@ -357,40 +176,15 @@ function App() {
       if (!window.confirm(confirmMsg)) return;
     }
 
-    setAssignments((prev) => {
-      const target = prev.find((a) => a.id === assignmentId);
-      if (!target) return prev;
-
-      const now = new Date();
-      const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-      const newTechAssignments = prev.filter((a) => a.technicianId === newTechnicianId);
-      const maxQueuePos = newTechAssignments.length > 0
-        ? Math.max(...newTechAssignments.map((a) => a.queuePosition))
-        : 0;
-
-      return prev.map((a) =>
-        a.id === assignmentId
-          ? {
-              ...a,
-              technicianId: newTechnicianId,
-              reassignedFrom: target.technicianId,
-              assignedAt: timestamp,
-              queuePosition: maxQueuePos + 1,
-            }
-          : a
-      );
-    });
+    assignmentActions.reassign(assignmentId, newTechnicianId);
   };
 
   const handleRemoveAssignment = (assignmentId: string) => {
-    setAssignments((prev) => prev.filter((a) => a.id !== assignmentId));
+    assignmentActions.remove(assignmentId);
   };
 
   const handleUpdateTechnicianStatus = (technicianId: string, status: TechnicianStatus) => {
-    setTechnicians((prev) =>
-      prev.map((t) => (t.id === technicianId ? { ...t, status } : t))
-    );
+    technicianActions.updateStatus(technicianId, status);
   };
 
   const assignmentStats = useMemo(() => {
@@ -466,6 +260,43 @@ function App() {
     setSelectedHistoryRecord((prev) => (prev?.id === record.id ? null : record));
   };
 
+  const handleExportData = () => {
+    dataIO.downloadJSON();
+  };
+
+  const handleImportClick = () => {
+    importFileRef.current?.click();
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const mode = window.confirm('点击"确定"合并数据，点击"取消"替换全部数据') ? 'merge' : 'replace';
+    try {
+      await dataIO.importFile(file, mode);
+      alert(mode === 'merge' ? '数据合并成功！' : '数据已全部替换！');
+    } catch {
+      // error already alerted
+    }
+    e.target.value = '';
+  };
+
+  const handleResetData = () => {
+    if (window.confirm('确定要重置所有数据吗？此操作不可恢复！')) {
+      dataIO.reset();
+      alert('数据已重置为初始状态');
+    }
+  };
+
+  if (!initialized) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+        <div style={{ fontSize: 18, color: '#64748b' }}>正在加载数据...</div>
+      </div>
+    );
+  }
+
   return (
     <main className="app">
       <section className="hero">
@@ -474,6 +305,57 @@ function App() {
         </p>
         <h1>{project.title}</h1>
         <span>{project.prompt}</span>
+        <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            onClick={handleExportData}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 6,
+              border: '1px solid #14b8a6',
+              background: 'transparent',
+              color: '#14b8a6',
+              cursor: 'pointer',
+              fontSize: 13,
+            }}
+          >
+            📤 导出数据
+          </button>
+          <button
+            onClick={handleImportClick}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 6,
+              border: '1px solid #0ea5e9',
+              background: 'transparent',
+              color: '#0ea5e9',
+              cursor: 'pointer',
+              fontSize: 13,
+            }}
+          >
+            📥 导入数据
+          </button>
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".json,application/json"
+            style={{ display: 'none' }}
+            onChange={handleImportFile}
+          />
+          <button
+            onClick={handleResetData}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 6,
+              border: '1px solid #dc2626',
+              background: 'transparent',
+              color: '#dc2626',
+              cursor: 'pointer',
+              fontSize: 13,
+            }}
+          >
+            🔄 重置数据
+          </button>
+        </div>
       </section>
 
       <section className="metrics">
