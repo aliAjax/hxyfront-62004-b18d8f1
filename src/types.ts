@@ -162,6 +162,122 @@ export const initialWorkOrders: WorkOrder[] = [
   },
 ];
 
+export interface CustomerHistoryRecord {
+  id: string;
+  customerName: string;
+  customerPhone: string;
+  brand: string;
+  length: string;
+  boardType: string;
+  maintenanceItems: string;
+  waxType: string;
+  sideEdgeAngle: string;
+  baseEdgeAngle: string;
+  deliveryNote: string;
+  createdAt: string;
+}
+
+export const initialCustomerHistory: CustomerHistoryRecord[] = [
+  {
+    id: 'CHR-001',
+    customerName: '张伟',
+    customerPhone: '13800138001',
+    brand: 'Burton',
+    length: '156',
+    boardType: '全地域',
+    maintenanceItems: '修刃+打蜡+底板修补',
+    waxType: '低温蜡',
+    sideEdgeAngle: '88°',
+    baseEdgeAngle: '1°',
+    deliveryNote: '客户偏好中等咬雪，侧刃不要太锐，下次维护前可保持当前角度',
+    createdAt: '2024-01-10',
+  },
+  {
+    id: 'CHR-002',
+    customerName: '张伟',
+    customerPhone: '13800138001',
+    brand: 'Jones',
+    length: '158',
+    boardType: '粉雪板',
+    maintenanceItems: '打蜡+底板检查',
+    waxType: '中温蜡',
+    sideEdgeAngle: '89°',
+    baseEdgeAngle: '1.5°',
+    deliveryNote: '粉雪板用钝刃即可，底刃1.5°适合深粉雪，注意板底刮痕修复',
+    createdAt: '2023-12-05',
+  },
+  {
+    id: 'CHR-003',
+    customerName: '李娜',
+    customerPhone: '13900139002',
+    brand: 'Head',
+    length: '165',
+    boardType: '竞速板',
+    maintenanceItems: '全面调校+氟素打蜡',
+    waxType: '氟素蜡',
+    sideEdgeAngle: '87°',
+    baseEdgeAngle: '0.5°',
+    deliveryNote: '竞技选手，要求极致锐利刃角，氟素蜡提高滑速，交付前确认刃角精度',
+    createdAt: '2024-01-08',
+  },
+  {
+    id: 'CHR-004',
+    customerName: '李娜',
+    customerPhone: '13900139002',
+    brand: 'Head',
+    length: '163',
+    boardType: '竞速板',
+    maintenanceItems: '修刃+打蜡',
+    waxType: '中温蜡',
+    sideEdgeAngle: '88°',
+    baseEdgeAngle: '0.7°',
+    deliveryNote: '训练用板，刃角稍钝以增加容错，日常训练不需要氟素蜡',
+    createdAt: '2023-11-20',
+  },
+  {
+    id: 'CHR-005',
+    customerName: '王强',
+    customerPhone: '15000150003',
+    brand: 'Ride',
+    length: '152',
+    boardType: '公园板',
+    maintenanceItems: '底板修补+打蜡',
+    waxType: '高温蜡',
+    sideEdgeAngle: '90°',
+    baseEdgeAngle: '1°',
+    deliveryNote: '公园板钝刃防卡刃，底刃1°保持稳定，高温蜡适合室内雪场',
+    createdAt: '2024-01-12',
+  },
+  {
+    id: 'CHR-006',
+    customerName: '王强',
+    customerPhone: '15000150003',
+    brand: 'Capita',
+    length: '155',
+    boardType: '公园板',
+    maintenanceItems: '修刃+打蜡+板尾修补',
+    waxType: '无氟蜡',
+    sideEdgeAngle: '89°',
+    baseEdgeAngle: '0.5°',
+    deliveryNote: '湿软雪况稍锐侧刃，板尾有撞痕需注意修补质量',
+    createdAt: '2023-10-28',
+  },
+  {
+    id: 'CHR-007',
+    customerName: '赵雪',
+    customerPhone: '18600186004',
+    brand: 'Jones',
+    length: '149',
+    boardType: '粉雪板',
+    maintenanceItems: '全面保养',
+    waxType: '低温蜡',
+    sideEdgeAngle: '89.5°',
+    baseEdgeAngle: '1.5°',
+    deliveryNote: '新手偏好宽松操控，刃角不要太锐，低温蜡适合户外粉雪',
+    createdAt: '2024-01-16',
+  },
+];
+
 export const emptyFormData: WorkOrderFormData = {
   brand: '',
   length: '',

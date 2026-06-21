@@ -3,12 +3,15 @@ import './styles.css';
 import WorkOrderForm from './WorkOrderForm';
 import WorkOrderList from './WorkOrderList';
 import EdgeAngleTable from './EdgeAngleTable';
+import CustomerHistoryPanel from './CustomerHistoryPanel';
 import {
   WorkOrder,
   WorkOrderFormData,
   initialWorkOrders,
   EdgeAngleParam,
   initialEdgeAngleParams,
+  CustomerHistoryRecord,
+  initialCustomerHistory,
 } from './types';
 
 const project = {
@@ -28,6 +31,8 @@ function App() {
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [selectedEdgeParam, setSelectedEdgeParam] = useState<EdgeAngleParam | null>(null);
   const [edgeParams] = useState<EdgeAngleParam[]>(initialEdgeAngleParams);
+  const [customerHistory] = useState<CustomerHistoryRecord[]>(initialCustomerHistory);
+  const [selectedHistoryRecord, setSelectedHistoryRecord] = useState<CustomerHistoryRecord | null>(null);
 
   const getNextOrderId = () => {
     let maxNum = 0;
@@ -49,6 +54,7 @@ function App() {
       createdAt: new Date().toISOString().split('T')[0],
     };
     setOrders([newOrder, ...orders]);
+    setSelectedHistoryRecord(null);
   };
 
   const filteredOrders = activeFilter
@@ -71,6 +77,10 @@ function App() {
 
   const handleSelectEdgeParam = (param: EdgeAngleParam) => {
     setSelectedEdgeParam(param);
+  };
+
+  const handleSelectHistoryRecord = (record: CustomerHistoryRecord) => {
+    setSelectedHistoryRecord((prev) => (prev?.id === record.id ? null : record));
   };
 
   return (
@@ -124,8 +134,14 @@ function App() {
           </div>
         </aside>
 
-        <WorkOrderForm onSubmit={handleSubmit} selectedEdgeParam={selectedEdgeParam} />
+        <WorkOrderForm onSubmit={handleSubmit} selectedEdgeParam={selectedEdgeParam} historyFill={selectedHistoryRecord} />
       </section>
+
+      <CustomerHistoryPanel
+        records={customerHistory}
+        onSelectRecord={handleSelectHistoryRecord}
+        selectedRecordId={selectedHistoryRecord?.id ?? null}
+      />
 
       <EdgeAngleTable params={edgeParams} onSelectParam={handleSelectEdgeParam} />
 

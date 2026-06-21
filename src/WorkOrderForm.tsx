@@ -6,11 +6,13 @@ import {
   WAX_TYPES,
   REPAIR_LOCATIONS,
   EdgeAngleParam,
+  CustomerHistoryRecord,
 } from './types';
 
 interface WorkOrderFormProps {
   onSubmit: (data: WorkOrderFormData) => void;
   selectedEdgeParam: EdgeAngleParam | null;
+  historyFill: CustomerHistoryRecord | null;
 }
 
 const DRAFT_KEY = 'work-order-draft';
@@ -36,7 +38,7 @@ const FIELD_LABELS: Record<keyof WorkOrderFormData, string> = {
   customerPreference: '客户偏好',
 };
 
-export default function WorkOrderForm({ onSubmit, selectedEdgeParam }: WorkOrderFormProps) {
+export default function WorkOrderForm({ onSubmit, selectedEdgeParam, historyFill }: WorkOrderFormProps) {
   const [formData, setFormData] = useState<WorkOrderFormData>(emptyFormData);
   const [errors, setErrors] = useState<Partial<Record<keyof WorkOrderFormData, string>>>({});
   const [draftSaved, setDraftSaved] = useState(false);
@@ -62,6 +64,21 @@ export default function WorkOrderForm({ onSubmit, selectedEdgeParam }: WorkOrder
       }));
     }
   }, [selectedEdgeParam]);
+
+  useEffect(() => {
+    if (historyFill) {
+      setFormData((prev) => ({
+        ...prev,
+        brand: historyFill.brand,
+        length: historyFill.length,
+        boardType: historyFill.boardType,
+        sideEdgeAngle: historyFill.sideEdgeAngle,
+        baseEdgeAngle: historyFill.baseEdgeAngle,
+        waxType: historyFill.waxType,
+        customerPreference: historyFill.deliveryNote,
+      }));
+    }
+  }, [historyFill]);
 
   const handleChange = (field: keyof WorkOrderFormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
