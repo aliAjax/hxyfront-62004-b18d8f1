@@ -1,4 +1,4 @@
-import { WorkOrder, DAMAGE_TYPES, SEVERITY_LEVELS, STATUS_CONFIG, isQualityCheckCompleted } from './types';
+import { WorkOrder, Technician, WorkOrderAssignment, DAMAGE_TYPES, SEVERITY_LEVELS, STATUS_CONFIG, isQualityCheckCompleted } from './types';
 
 interface WorkOrderCardProps {
   order: WorkOrder;
@@ -7,6 +7,8 @@ interface WorkOrderCardProps {
   onViewHistory: (order: WorkOrder) => void;
   onOpenQuote?: (order: WorkOrder) => void;
   onOpenQa?: (order: WorkOrder) => void;
+  assignment?: WorkOrderAssignment;
+  technician?: Technician;
 }
 
 const getDamageTypeLabel = (type: string) =>
@@ -33,7 +35,7 @@ const getDaysUntilDelivery = (estimatedDelivery: string) => {
   return diffDays;
 };
 
-export default function WorkOrderCard({ order, onDragStart, onDragEnd, onViewHistory, onOpenQuote, onOpenQa }: WorkOrderCardProps) {
+export default function WorkOrderCard({ order, onDragStart, onDragEnd, onViewHistory, onOpenQuote, onOpenQa, assignment, technician }: WorkOrderCardProps) {
   const hasMarks = order.damageMarks && order.damageMarks.length > 0;
   const statusInfo = STATUS_CONFIG.find((s) => s.value === order.status);
   const overdue = isOverdue(order.estimatedDelivery);
@@ -155,6 +157,27 @@ export default function WorkOrderCard({ order, onDragStart, onDragEnd, onViewHis
         <div className="kanban-card-preference">
           <span className="preference-label">客户偏好：</span>
           <span className="preference-value">{order.customerPreference}</span>
+        </div>
+      )}
+
+      {technician && assignment && (
+        <div className="kanban-card-assignment">
+          <div className="assignment-avatar" style={{ background: technician.avatarColor }}>
+            {technician.name.charAt(0)}
+          </div>
+          <div className="assignment-info">
+            <span className="assignment-tech-name">{technician.name}</span>
+            <span className="assignment-meta">
+              {assignment.priority >= 3 ? '🚨 紧急' : assignment.priority === 2 ? '⚡ 较高' : '📋 普通'}
+              {' · '}预计 {assignment.estimatedMinutes}分钟
+            </span>
+          </div>
+        </div>
+      )}
+
+      {!technician && order.status !== 'delivered' && (
+        <div className="kanban-card-unassigned">
+          <span>⚠️ 未分配技师</span>
         </div>
       )}
 

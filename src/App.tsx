@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import './styles.css';
 import WorkOrderForm from './WorkOrderForm';
 import WorkOrderList from './WorkOrderList';
@@ -7,6 +7,7 @@ import CustomerHistoryPanel from './CustomerHistoryPanel';
 import KanbanBoard from './KanbanBoard';
 import StatusHistoryModal from './StatusHistoryModal';
 import QuoteEstimator from './QuoteEstimator';
+import ScheduleAndDispatch from './ScheduleAndDispatch';
 import {
   WorkOrder,
   WorkOrderFormData,
@@ -23,6 +24,12 @@ import {
   createEmptyQualityChecklist,
   isQualityCheckCompleted,
   hasQualityCheckFailedItems,
+  Technician,
+  WorkOrderAssignment,
+  initialTechnicians,
+  initialAssignments,
+  TechnicianStatus,
+  SKILL_LEVEL_CONFIG,
 } from './types';
 import QualityChecklistPanel from './QualityChecklistPanel';
 
@@ -52,6 +59,9 @@ function App() {
   const [quoteTargetOrderId, setQuoteTargetOrderId] = useState<string | null>(null);
   const quoteSectionRef = useRef<HTMLDivElement>(null);
   const qaSectionRef = useRef<HTMLDivElement>(null);
+
+  const [technicians, setTechnicians] = useState<Technician[]>(initialTechnicians);
+  const [assignments, setAssignments] = useState<WorkOrderAssignment[]>(initialAssignments);
 
   const getNextOrderId = () => {
     let maxNum = 0;
@@ -318,6 +328,75 @@ function App() {
     }
   };
 
+  const handleAssignOrder = (assignment: WorkOrderAssignment) => {
+    setAssignments((prev) => [...prev, assignment]);
+  };
+
+  const handleReassignOrder = (assignmentId: string, newTechnicianId: string) => {
+    setAssignments((prev) => {
+      const target = prev.find((a) => a.id === assignmentId);
+      if (!target) return prev;
+
+      const now = new Date();
+      const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+      const newTechAssignments = prev.filter((a) => a.technicianId === newTechnicianId);
+      const maxQueuePos = newTechAssignments.length > 0
+        ? Math.max(...newTechAssignments.map((a) => a.queuePosition))
+        : 0;
+
+      return prev.map((a) =>
+        a.id === assignmentId
+          ? {
+              ...a,
+              technicianId: newTechnicianId,
+              reassignedFrom: target.technicianId,
+              assignedAt: timestamp,
+              queuePosition: maxQueuePos + 1,
+            }
+          : a
+      );
+    });
+  };
+
+  const handleRemoveAssignment = (assignmentId: string) => {
+    setAssignments((prev) => prev.filter((a) => a.id !== assignmentId));
+  };
+
+  const handleUpdateTechnicianStatus = (technicianId: string, status: TechnicianStatus) => {
+    setTechnicians((prev) =>
+      prev.map((t) => (t.id === technicianId ? { ...t, status } : t))
+    );
+  };
+
+  const assignmentStats = useMemo(() => {
+    const assignedCount = assignments.length;
+    const pendingAssign = orders.filter(
+      (o) => o.status !== 'delivered' && !assignments.some((a) => a.workOrderId === o.id)
+    ).length;
+
+    const totalAssignedMinutes = assignments.reduce((sum, a) => sum + a.estimatedMinutes, 0);
+    const totalCapacity = technicians.reduce(
+      (sum, t) => sum + t.dailyCapacityMinutes * SKILL_LEVEL_CONFIG[t.skillLevel].capacityMultiplier,
+      0
+    );
+    const overallLoad = totalCapacity > 0 ? Math.round((totalAssignedMinutes / totalCapacity) * 100) : 0;
+
+    const overloadedTechs = technicians.filter((tech) => {
+      const techAssignments = assignments.filter((a) => a.technicianId === tech.id);
+      const totalMinutes = techAssignments.reduce((sum, a) => sum + a.estimatedMinutes, 0);
+      const effectiveCapacity = tech.dailyCapacityMinutes * SKILL_LEVEL_CONFIG[tech.skillLevel].capacityMultiplier;
+      return totalMinutes > effectiveCapacity;
+    }).length;
+
+    return {
+      assignedCount,
+      pendingAssign,
+      overallLoad,
+      overloadedTechs,
+    };
+  }, [assignments, orders, technicians]);
+
   let filteredOrders = activeFilter
     ? orders.filter((order) => order.boardType === activeFilter)
     : orders;
@@ -379,12 +458,22 @@ function App() {
           <strong>{inProgressCount}</strong>
         </article>
         <article>
-          <small>待质检</small>
-          <strong>{qaCount}</strong>
+          <small>已分配</small>
+          <strong style={{ color: 'var(--secondary)' }}>{assignmentStats.assignedCount}</strong>
         </article>
         <article>
-          <small>已交付</small>
-          <strong>{deliveredCount}</strong>
+          <small>待分配</small>
+          <strong style={{ color: assignmentStats.pendingAssign > 0 ? 'var(--accent)' : 'inherit' }}>{assignmentStats.pendingAssign}</strong>
+        </article>
+        <article>
+          <small>整体负荷</small>
+          <strong style={{ color: assignmentStats.overallLoad > 85 ? 'var(--error)' : assignmentStats.overallLoad > 70 ? 'var(--accent)' : 'var(--secondary)' }}>
+            {assignmentStats.overallLoad}%
+          </strong>
+        </article>
+        <article>
+          <small>超负荷技师</small>
+          <strong style={{ color: assignmentStats.overloadedTechs > 0 ? 'var(--error)' : 'inherit' }}>{assignmentStats.overloadedTechs}</strong>
         </article>
         <article>
           <small>逾期工单</small>
@@ -452,10 +541,22 @@ function App() {
 
       <KanbanBoard
         orders={orders}
+        assignments={assignments}
+        technicians={technicians}
         onMoveOrder={handleMoveOrder}
         onViewHistory={handleViewHistory}
         onOpenQuote={handleOpenQuote}
         onOpenQa={handleOpenQaChecklist}
+      />
+
+      <ScheduleAndDispatch
+        workOrders={orders}
+        technicians={technicians}
+        assignments={assignments}
+        onAssign={handleAssignOrder}
+        onReassign={handleReassignOrder}
+        onUpdateTechnicianStatus={handleUpdateTechnicianStatus}
+        onRemoveAssignment={handleRemoveAssignment}
       />
 
       <div ref={quoteSectionRef}>
@@ -488,6 +589,8 @@ function App() {
         editingOrderId={editingOrder?.id ?? null}
         onOpenQuote={handleOpenQuote}
         onOpenQa={handleOpenQaChecklist}
+        assignments={assignments}
+        technicians={technicians}
       />
 
       <StatusHistoryModal

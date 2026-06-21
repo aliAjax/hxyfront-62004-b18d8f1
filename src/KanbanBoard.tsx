@@ -1,16 +1,18 @@
 import { useState } from 'react';
-import { WorkOrder, WorkOrderStatus, STATUS_CONFIG, StatusHistoryRecord } from './types';
+import { WorkOrder, WorkOrderStatus, STATUS_CONFIG, StatusHistoryRecord, WorkOrderAssignment, Technician } from './types';
 import WorkOrderCard from './WorkOrderCard';
 
 interface KanbanBoardProps {
   orders: WorkOrder[];
+  assignments?: WorkOrderAssignment[];
+  technicians?: Technician[];
   onMoveOrder: (orderId: string, newStatus: WorkOrderStatus, historyRecord: StatusHistoryRecord) => void;
   onViewHistory: (order: WorkOrder) => void;
   onOpenQuote: (order: WorkOrder) => void;
   onOpenQa?: (order: WorkOrder) => void;
 }
 
-export default function KanbanBoard({ orders, onMoveOrder, onViewHistory, onOpenQuote, onOpenQa }: KanbanBoardProps) {
+export default function KanbanBoard({ orders, assignments = [], technicians = [], onMoveOrder, onViewHistory, onOpenQuote, onOpenQa }: KanbanBoardProps) {
   const [draggingOrderId, setDraggingOrderId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<WorkOrderStatus | null>(null);
 
@@ -130,21 +132,27 @@ export default function KanbanBoard({ orders, onMoveOrder, onViewHistory, onOpen
                     <span className="empty-text">暂无工单</span>
                   </div>
                 ) : (
-                  columnOrders.map((order) => (
-                    <div
-                      key={order.id}
-                      className={`kanban-card-wrapper ${draggingOrderId === order.id ? 'dragging' : ''}`}
-                    >
-                      <WorkOrderCard
-                        order={order}
-                        onDragStart={handleDragStart}
-                        onDragEnd={handleDragEnd}
-                        onViewHistory={onViewHistory}
-                        onOpenQuote={onOpenQuote}
-                        onOpenQa={onOpenQa}
-                      />
-                    </div>
-                  ))
+                  columnOrders.map((order) => {
+                    const assignment = assignments.find((a) => a.workOrderId === order.id);
+                    const technician = assignment ? technicians.find((t) => t.id === assignment.technicianId) : undefined;
+                    return (
+                      <div
+                        key={order.id}
+                        className={`kanban-card-wrapper ${draggingOrderId === order.id ? 'dragging' : ''}`}
+                      >
+                        <WorkOrderCard
+                          order={order}
+                          onDragStart={handleDragStart}
+                          onDragEnd={handleDragEnd}
+                          onViewHistory={onViewHistory}
+                          onOpenQuote={onOpenQuote}
+                          onOpenQa={onOpenQa}
+                          assignment={assignment}
+                          technician={technician}
+                        />
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>

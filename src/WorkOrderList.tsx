@@ -1,4 +1,4 @@
-import { WorkOrder, DAMAGE_TYPES, SEVERITY_LEVELS, STATUS_CONFIG, isQualityCheckCompleted } from './types';
+import { WorkOrder, Technician, WorkOrderAssignment, DAMAGE_TYPES, SEVERITY_LEVELS, STATUS_CONFIG, isQualityCheckCompleted } from './types';
 
 interface WorkOrderListProps {
   orders: WorkOrder[];
@@ -7,6 +7,8 @@ interface WorkOrderListProps {
   editingOrderId: string | null;
   onOpenQuote?: (order: WorkOrder) => void;
   onOpenQa?: (order: WorkOrder) => void;
+  assignments?: WorkOrderAssignment[];
+  technicians?: Technician[];
 }
 
 const getStatusInfo = (status: string) => {
@@ -23,7 +25,7 @@ const getDamageTypeLabel = (type: string) =>
 const getSeverityLabel = (sev: string) =>
   SEVERITY_LEVELS.find((s) => s.value === sev)?.label ?? sev;
 
-export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, editingOrderId, onOpenQuote, onOpenQa }: WorkOrderListProps) {
+export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, editingOrderId, onOpenQuote, onOpenQa, assignments = [], technicians = [] }: WorkOrderListProps) {
   return (
     <section className="panel">
       <div className="heading">
@@ -38,6 +40,8 @@ export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, edi
           const status = getStatusInfo(order.status);
           const isEditing = order.id === editingOrderId;
           const hasMarks = order.damageMarks && order.damageMarks.length > 0;
+          const assignment = assignments.find((a) => a.workOrderId === order.id);
+          const technician = assignment ? technicians.find((t) => t.id === assignment.technicianId) : undefined;
 
           return (
             <article
@@ -99,6 +103,28 @@ export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, edi
 
                 {order.customerPreference && (
                   <p className="record-note">偏好：{order.customerPreference}</p>
+                )}
+
+                {technician && assignment && (
+                  <div className="record-assignment">
+                    <div className="record-assignment-avatar" style={{ background: technician.avatarColor }}>
+                      {technician.name.charAt(0)}
+                    </div>
+                    <div className="record-assignment-info">
+                      <strong>{technician.name}</strong>
+                      <span>
+                        {assignment.priority >= 3 ? '🚨 紧急' : assignment.priority === 2 ? '⚡ 较高优先级' : '📋 普通优先级'}
+                        {' · '}预计 {assignment.estimatedMinutes}分钟
+                        {assignment.note && ` · 📝 ${assignment.note}`}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {!technician && order.status !== 'delivered' && (
+                  <p className="record-note unassigned-note">
+                    ⚠️ 该工单尚未分配技师，请前往排班与分配模块进行分配
+                  </p>
                 )}
 
                 {order.quoteSummary && order.quoteSummary.finalTotal > 0 && (

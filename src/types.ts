@@ -879,3 +879,126 @@ export const LENGTH_PRICE_TIERS = [
 ];
 
 export const DAMAGE_LABOR_COST = 40;
+
+export type TechnicianStatus = 'on_duty' | 'off_duty' | 'break' | 'overloaded';
+
+export type SkillLevel = 'junior' | 'intermediate' | 'senior' | 'master';
+
+export interface Technician {
+  id: string;
+  name: string;
+  status: TechnicianStatus;
+  skillLevel: SkillLevel;
+  dailyCapacityMinutes: number;
+  specialties: string[];
+  avatarColor: string;
+}
+
+export interface WorkOrderAssignment {
+  id: string;
+  workOrderId: string;
+  technicianId: string;
+  assignedAt: string;
+  estimatedMinutes: number;
+  complexityScore: number;
+  priority: number;
+  queuePosition: number;
+  reassignedFrom?: string;
+  note?: string;
+}
+
+export type AssignmentViewMode = 'board' | 'technician' | 'queue';
+
+export const SKILL_LEVEL_CONFIG: Record<SkillLevel, { label: string; capacityMultiplier: number; color: string }> = {
+  junior: { label: '初级技师', capacityMultiplier: 0.8, color: '#94a3b8' },
+  intermediate: { label: '中级技师', capacityMultiplier: 1.0, color: '#0ea5e9' },
+  senior: { label: '高级技师', capacityMultiplier: 1.3, color: '#8b5cf6' },
+  master: { label: '首席技师', capacityMultiplier: 1.5, color: '#f59e0b' },
+};
+
+export const TECHNICIAN_STATUS_CONFIG: Record<TechnicianStatus, { label: string; color: string; bgColor: string; icon: string }> = {
+  on_duty: { label: '在岗', color: '#059669', bgColor: '#d1fae5', icon: '🟢' },
+  off_duty: { label: '离岗', color: '#64748b', bgColor: '#f1f5f9', icon: '⚪' },
+  break: { label: '休息', color: '#d97706', bgColor: '#fef3c7', icon: '🟡' },
+  overloaded: { label: '超负荷', color: '#dc2626', bgColor: '#fee2e2', icon: '🔴' },
+};
+
+export const COMPLEXITY_MULTIPLIER: Record<SeverityLevel, number> = {
+  mild: 1.0,
+  moderate: 1.5,
+  severe: 2.5,
+};
+
+export const BASE_TASK_MINUTES: Record<string, number> = {
+  pending_inspection: 20,
+  pending_wax: 30,
+  pending_base_repair: 60,
+  pending_qa: 15,
+};
+
+export const calculateEstimatedMinutes = (workOrder: WorkOrder): number => {
+  const baseTime = BASE_TASK_MINUTES[workOrder.status] || 30;
+  const damageComplexity = workOrder.damageMarks.reduce((sum, mark) => {
+    return sum + COMPLEXITY_MULTIPLIER[mark.severity];
+  }, 0);
+  return Math.round(baseTime * (1 + damageComplexity * 0.3));
+};
+
+export const calculateComplexityScore = (workOrder: WorkOrder): number => {
+  const baseScore = workOrder.status === 'pending_base_repair' ? 3 : workOrder.status === 'pending_wax' ? 2 : 1;
+  const damageScore = workOrder.damageMarks.reduce((sum, mark) => {
+    const severityScore = mark.severity === 'severe' ? 3 : mark.severity === 'moderate' ? 2 : 1;
+    return sum + severityScore;
+  }, 0);
+  return baseScore + damageScore;
+};
+
+export const initialTechnicians: Technician[] = [
+  {
+    id: 'TECH-001',
+    name: '张技师',
+    status: 'on_duty',
+    skillLevel: 'master',
+    dailyCapacityMinutes: 480,
+    specialties: ['竞速板', '修刃', '竞技调校'],
+    avatarColor: '#f59e0b',
+  },
+  {
+    id: 'TECH-002',
+    name: '李技师',
+    status: 'on_duty',
+    skillLevel: 'senior',
+    dailyCapacityMinutes: 420,
+    specialties: ['公园板', '底板修补', '氟素打蜡'],
+    avatarColor: '#8b5cf6',
+  },
+  {
+    id: 'TECH-003',
+    name: '王技师',
+    status: 'on_duty',
+    skillLevel: 'intermediate',
+    dailyCapacityMinutes: 360,
+    specialties: ['全地域', '粉雪板', '基础保养'],
+    avatarColor: '#0ea5e9',
+  },
+  {
+    id: 'TECH-004',
+    name: '赵技师',
+    status: 'break',
+    skillLevel: 'junior',
+    dailyCapacityMinutes: 300,
+    specialties: ['打蜡', '基础修刃'],
+    avatarColor: '#94a3b8',
+  },
+  {
+    id: 'TECH-005',
+    name: '陈技师',
+    status: 'on_duty',
+    skillLevel: 'senior',
+    dailyCapacityMinutes: 420,
+    specialties: ['边缘脱层修复', '整块更换', '高温蜡处理'],
+    avatarColor: '#14b8a6',
+  },
+];
+
+export const initialAssignments: WorkOrderAssignment[] = [];
