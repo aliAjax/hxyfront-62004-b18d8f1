@@ -13,6 +13,17 @@ export interface StatusHistoryRecord {
   note?: string;
 }
 
+export interface QuoteSummary {
+  labor: number;
+  material: number;
+  rush: number;
+  subtotal: number;
+  discountPercent: number;
+  discount: number;
+  finalTotal: number;
+  remark: string;
+}
+
 export interface WorkOrder {
   id: string;
   brand: string;
@@ -30,6 +41,7 @@ export interface WorkOrder {
   riskWarning: string;
   damageMarks: BaseDamageMark[];
   statusHistory: StatusHistoryRecord[];
+  quoteSummary?: QuoteSummary;
 }
 
 export interface WorkOrderFormData {
@@ -655,3 +667,64 @@ export const emptyFormData: WorkOrderFormData = {
   customerPreference: '',
   damageMarks: [],
 };
+
+export interface QuoteBreakdown {
+  labor: number;
+  material: number;
+  rush: number;
+}
+
+export interface QuoteEstimate {
+  boardType: string;
+  length: string;
+  edgeAngleAdjustment: string;
+  waxType: string;
+  baseDamageCount: number;
+  repairMaterial: string;
+  isRush: boolean;
+  breakdown: QuoteBreakdown;
+  subtotal: number;
+  discount: number;
+  discountPercent: number;
+  finalTotal: number;
+  remark: string;
+}
+
+export const EDGE_ANGLE_ADJUSTMENTS = [
+  { value: 'standard', label: '标准调校', laborPrice: 80 },
+  { value: 'precision', label: '精密调校', laborPrice: 120 },
+  { value: 'race', label: '竞技调校', laborPrice: 180 },
+];
+
+export const REPAIR_MATERIALS = [
+  { value: 'pTex', label: 'P-Tex 填充', pricePerUnit: 30 },
+  { value: 'epoxy', label: '环氧树脂', pricePerUnit: 45 },
+  { value: 'carbon', label: '碳纤维补片', pricePerUnit: 80 },
+  { value: 'fullBase', label: '整块底座', pricePerUnit: 200 },
+];
+
+export const WAX_PRICING: Record<string, number> = {
+  '低温蜡': 50,
+  '中温蜡': 45,
+  '高温蜡': 40,
+  '氟素蜡': 80,
+  '无氟蜡': 35,
+};
+
+export const BOARD_TYPE_PRICE_MULTIPLIER: Record<string, number> = {
+  '全地域': 1.0,
+  '公园板': 1.1,
+  '竞速板': 1.3,
+  '粉雪板': 1.2,
+};
+
+export const RUSH_SURCHARGE_PERCENT = 0.3;
+
+export const LENGTH_PRICE_TIERS = [
+  { min: 0, max: 140, baseLabor: 60 },
+  { min: 140, max: 155, baseLabor: 80 },
+  { min: 155, max: 170, baseLabor: 100 },
+  { min: 170, max: 999, baseLabor: 120 },
+];
+
+export const DAMAGE_LABOR_COST = 40;

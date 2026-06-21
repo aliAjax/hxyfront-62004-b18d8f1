@@ -5,6 +5,7 @@ interface WorkOrderCardProps {
   onDragStart: (orderId: string) => void;
   onDragEnd: () => void;
   onViewHistory: (order: WorkOrder) => void;
+  onOpenQuote?: (order: WorkOrder) => void;
 }
 
 const getDamageTypeLabel = (type: string) =>
@@ -31,11 +32,12 @@ const getDaysUntilDelivery = (estimatedDelivery: string) => {
   return diffDays;
 };
 
-export default function WorkOrderCard({ order, onDragStart, onDragEnd, onViewHistory }: WorkOrderCardProps) {
+export default function WorkOrderCard({ order, onDragStart, onDragEnd, onViewHistory, onOpenQuote }: WorkOrderCardProps) {
   const hasMarks = order.damageMarks && order.damageMarks.length > 0;
   const statusInfo = STATUS_CONFIG.find((s) => s.value === order.status);
   const overdue = isOverdue(order.estimatedDelivery);
   const daysUntil = getDaysUntilDelivery(order.estimatedDelivery);
+  const hasQuote = order.quoteSummary && order.quoteSummary.finalTotal > 0;
 
   return (
     <article
@@ -139,14 +141,43 @@ export default function WorkOrderCard({ order, onDragStart, onDragEnd, onViewHis
         </div>
       )}
 
+      {hasQuote && order.quoteSummary && (
+        <div className="quote-summary-card">
+          <div className="quote-summary-header">
+            <span className="quote-summary-title">💰 报价</span>
+            <span className="quote-summary-price">¥{order.quoteSummary.finalTotal}</span>
+          </div>
+          <div className="quote-summary-detail">
+            人工 ¥{order.quoteSummary.labor} · 材料 ¥{order.quoteSummary.material}
+            {order.quoteSummary.rush > 0 && ` · 加急 ¥${order.quoteSummary.rush}`}
+          </div>
+          {order.quoteSummary.remark && (
+            <div className="quote-summary-remark">{order.quoteSummary.remark}</div>
+          )}
+        </div>
+      )}
+
       <div className="kanban-card-footer">
         <span className="card-date">创建于 {order.createdAt}</span>
-        <button
-          className="card-history-btn"
-          onClick={() => onViewHistory(order)}
-        >
-          📋 历史
-        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {onOpenQuote && (
+            <button
+              className="card-history-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenQuote(order);
+              }}
+            >
+              🧮 报价
+            </button>
+          )}
+          <button
+            className="card-history-btn"
+            onClick={() => onViewHistory(order)}
+          >
+            📋 历史
+          </button>
+        </div>
       </div>
     </article>
   );

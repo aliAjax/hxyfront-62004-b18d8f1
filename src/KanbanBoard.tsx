@@ -6,9 +6,10 @@ interface KanbanBoardProps {
   orders: WorkOrder[];
   onMoveOrder: (orderId: string, newStatus: WorkOrderStatus, historyRecord: StatusHistoryRecord) => void;
   onViewHistory: (order: WorkOrder) => void;
+  onOpenQuote: (order: WorkOrder) => void;
 }
 
-export default function KanbanBoard({ orders, onMoveOrder, onViewHistory }: KanbanBoardProps) {
+export default function KanbanBoard({ orders, onMoveOrder, onViewHistory, onOpenQuote }: KanbanBoardProps) {
   const [draggingOrderId, setDraggingOrderId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<WorkOrderStatus | null>(null);
 
@@ -138,6 +139,7 @@ export default function KanbanBoard({ orders, onMoveOrder, onViewHistory }: Kanb
                         onDragStart={handleDragStart}
                         onDragEnd={handleDragEnd}
                         onViewHistory={onViewHistory}
+                        onOpenQuote={onOpenQuote}
                       />
                     </div>
                   ))

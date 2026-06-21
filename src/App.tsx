@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import './styles.css';
 import WorkOrderForm from './WorkOrderForm';
 import WorkOrderList from './WorkOrderList';
@@ -6,6 +6,7 @@ import EdgeAngleTable from './EdgeAngleTable';
 import CustomerHistoryPanel from './CustomerHistoryPanel';
 import KanbanBoard from './KanbanBoard';
 import StatusHistoryModal from './StatusHistoryModal';
+import QuoteEstimator from './QuoteEstimator';
 import {
   WorkOrder,
   WorkOrderFormData,
@@ -17,6 +18,7 @@ import {
   WorkOrderStatus,
   StatusHistoryRecord,
   STATUS_CONFIG,
+  QuoteSummary,
 } from './types';
 
 const project = {
@@ -41,6 +43,8 @@ function App() {
   const [selectedHistoryRecord, setSelectedHistoryRecord] = useState<CustomerHistoryRecord | null>(null);
   const [editingOrder, setEditingOrder] = useState<WorkOrder | null>(null);
   const [selectedHistoryOrder, setSelectedHistoryOrder] = useState<WorkOrder | null>(null);
+  const [quoteTargetOrderId, setQuoteTargetOrderId] = useState<string | null>(null);
+  const quoteSectionRef = useRef<HTMLDivElement>(null);
 
   const getNextOrderId = () => {
     let maxNum = 0;
@@ -163,6 +167,25 @@ function App() {
 
   const handleCancelEdit = () => {
     setEditingOrder(null);
+  };
+
+  const handleOpenQuote = (order: WorkOrder) => {
+    setQuoteTargetOrderId(order.id);
+    if (quoteSectionRef.current) {
+      quoteSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const handleApplyQuote = (summary: QuoteSummary) => {
+    if (!quoteTargetOrderId) return;
+    setOrders((prev) =>
+      prev.map((order) =>
+        order.id === quoteTargetOrderId
+          ? { ...order, quoteSummary: summary }
+          : order
+      )
+    );
+    setQuoteTargetOrderId(null);
   };
 
   let filteredOrders = activeFilter
@@ -301,13 +324,26 @@ function App() {
         orders={orders}
         onMoveOrder={handleMoveOrder}
         onViewHistory={handleViewHistory}
+        onOpenQuote={handleOpenQuote}
       />
+
+      <div ref={quoteSectionRef}>
+        <QuoteEstimator
+          initialBoardType={quoteTargetOrderId ? orders.find((o) => o.id === quoteTargetOrderId)?.boardType : undefined}
+          initialLength={quoteTargetOrderId ? orders.find((o) => o.id === quoteTargetOrderId)?.length : undefined}
+          initialWaxType={quoteTargetOrderId ? orders.find((o) => o.id === quoteTargetOrderId)?.waxType : undefined}
+          initialDamageCount={quoteTargetOrderId ? (orders.find((o) => o.id === quoteTargetOrderId)?.damageMarks?.length ?? 0) : undefined}
+          onApplyQuote={quoteTargetOrderId ? handleApplyQuote : undefined}
+          applyButtonText={quoteTargetOrderId ? `应用到工单 ${quoteTargetOrderId}` : '应用到工单'}
+        />
+      </div>
 
       <WorkOrderList
         orders={filteredOrders}
         onEditOrder={handleEditOrder}
         onToggleStatus={handleToggleStatus}
         editingOrderId={editingOrder?.id ?? null}
+        onOpenQuote={handleOpenQuote}
       />
 
       <StatusHistoryModal

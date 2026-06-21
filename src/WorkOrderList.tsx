@@ -5,6 +5,7 @@ interface WorkOrderListProps {
   onEditOrder: (order: WorkOrder) => void;
   onToggleStatus: (orderId: string) => void;
   editingOrderId: string | null;
+  onOpenQuote?: (order: WorkOrder) => void;
 }
 
 const getStatusInfo = (status: string) => {
@@ -21,7 +22,7 @@ const getDamageTypeLabel = (type: string) =>
 const getSeverityLabel = (sev: string) =>
   SEVERITY_LEVELS.find((s) => s.value === sev)?.label ?? sev;
 
-export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, editingOrderId }: WorkOrderListProps) {
+export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, editingOrderId, onOpenQuote }: WorkOrderListProps) {
   return (
     <section className="panel">
       <div className="heading">
@@ -99,6 +100,22 @@ export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, edi
                   <p className="record-note">偏好：{order.customerPreference}</p>
                 )}
 
+                {order.quoteSummary && order.quoteSummary.finalTotal > 0 && (
+                  <div className="quote-summary-card" style={{ marginTop: 10 }}>
+                    <div className="quote-summary-header">
+                      <span className="quote-summary-title">💰 报价</span>
+                      <span className="quote-summary-price">¥{order.quoteSummary.finalTotal}</span>
+                    </div>
+                    <div className="quote-summary-detail">
+                      人工 ¥{order.quoteSummary.labor} · 材料 ¥{order.quoteSummary.material}
+                      {order.quoteSummary.rush > 0 && ` · 加急 ¥${order.quoteSummary.rush}`}
+                    </div>
+                    {order.quoteSummary.remark && (
+                      <div className="quote-summary-remark">{order.quoteSummary.remark}</div>
+                    )}
+                  </div>
+                )}
+
                 <div className="record-actions">
                   <button
                     className="secondary small-btn"
@@ -107,6 +124,14 @@ export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, edi
                   >
                     {isEditing ? '编辑中...' : '编辑工单'}
                   </button>
+                  {onOpenQuote && (
+                    <button
+                      className="secondary small-btn"
+                      onClick={() => onOpenQuote(order)}
+                    >
+                      🧮 报价
+                    </button>
+                  )}
                   <button
                     className={`small-btn ${order.status === 'delivered' ? 'secondary' : 'primary'}`}
                     onClick={() => onToggleStatus(order.id)}
