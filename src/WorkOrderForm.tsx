@@ -8,6 +8,7 @@ import {
   EdgeAngleParam,
   CustomerHistoryRecord,
   WorkOrder,
+  STATUS_CONFIG,
 } from './types';
 import BaseDamageMarker from './BaseDamageMarker';
 
@@ -217,7 +218,22 @@ export default function WorkOrderForm({ onSubmit, selectedEdgeParam, historyFill
           <h2>{editingOrder ? `编辑工单 ${editingOrder.id}` : '创建工单'}</h2>
           {editingOrder && (
             <span style={{ fontSize: 13, color: '#64748b' }}>
-              状态：{editingOrder.status === 'pending' ? '待维护' : '已完工'} · 创建：{editingOrder.createdAt}
+              状态：
+              <span
+                style={{
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  margin: '0 4px',
+                  backgroundColor: (STATUS_CONFIG.find((s) => s.value === editingOrder.status)?.color ?? '#64748b') + '15',
+                  color: STATUS_CONFIG.find((s) => s.value === editingOrder.status)?.color ?? '#64748b',
+                  fontWeight: 600,
+                  fontSize: 12,
+                }}
+              >
+                {STATUS_CONFIG.find((s) => s.value === editingOrder.status)?.icon}{' '}
+                {STATUS_CONFIG.find((s) => s.value === editingOrder.status)?.label}
+              </span>
+              · 创建：{editingOrder.createdAt}
             </span>
           )}
         </div>
