@@ -54,7 +54,24 @@ export const createEmptyQualityChecklist = (workOrderId: string): QualityCheckli
 
 export const isQualityCheckCompleted = (checklist?: QualityChecklist): boolean => {
   if (!checklist) return false;
-  return checklist.completedAt !== null && checklist.items.every((item) => item.status !== 'pending');
+  return checklist.completedAt !== null && checklist.items.every((item) => item.status === 'pass');
+};
+
+export const hasQualityCheckFailedItems = (checklist?: QualityChecklist): boolean => {
+  if (!checklist) return false;
+  return checklist.items.some((item) => item.status === 'fail');
+};
+
+export const getQualityCheckProgress = (checklist?: QualityChecklist): { passed: number; failed: number; pending: number; total: number } => {
+  if (!checklist) {
+    return { passed: 0, failed: 0, pending: 0, total: 0 };
+  }
+  return {
+    passed: checklist.items.filter((i) => i.status === 'pass').length,
+    failed: checklist.items.filter((i) => i.status === 'fail').length,
+    pending: checklist.items.filter((i) => i.status === 'pending').length,
+    total: checklist.items.length,
+  };
 };
 
 export interface StatusHistoryRecord {

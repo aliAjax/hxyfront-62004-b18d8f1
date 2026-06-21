@@ -22,6 +22,7 @@ import {
   QualityChecklist,
   createEmptyQualityChecklist,
   isQualityCheckCompleted,
+  hasQualityCheckFailedItems,
 } from './types';
 import QualityChecklistPanel from './QualityChecklistPanel';
 
@@ -43,7 +44,7 @@ function App() {
   const [statusFilter, setStatusFilter] = useState<'all' | WorkOrderStatus>('all');
   const [selectedEdgeParam, setSelectedEdgeParam] = useState<EdgeAngleParam | null>(null);
   const [edgeParams] = useState<EdgeAngleParam[]>(initialEdgeAngleParams);
-  const [customerHistory] = useState<CustomerHistoryRecord[]>(initialCustomerHistory);
+  const [customerHistory, setCustomerHistory] = useState<CustomerHistoryRecord[]>(initialCustomerHistory);
   const [selectedHistoryRecord, setSelectedHistoryRecord] = useState<CustomerHistoryRecord | null>(null);
   const [editingOrder, setEditingOrder] = useState<WorkOrder | null>(null);
   const [selectedHistoryOrder, setSelectedHistoryOrder] = useState<WorkOrder | null>(null);
@@ -127,8 +128,19 @@ function App() {
         const nextIndex = (currentIndex + 1) % statusOrder.length;
         const nextStatus = statusOrder[nextIndex];
 
-        if (nextStatus === 'delivered' && !isQualityCheckCompleted(order.qualityChecklist)) {
-          return order;
+        if (nextStatus === 'delivered') {
+          if (!order.qualityChecklist) {
+            alert('请先完成质检检查清单后再交付');
+            return order;
+          }
+          if (hasQualityCheckFailedItems(order.qualityChecklist)) {
+            alert('质检存在不通过项，无法交付。请先修复所有不通过项后再尝试交付。');
+            return order;
+          }
+          if (!isQualityCheckCompleted(order.qualityChecklist)) {
+            alert('请先完成所有质检项并确保全部通过后再交付');
+            return order;
+          }
         }
 
         const now = new Date();
@@ -144,11 +156,17 @@ function App() {
           note: `移至${targetLabel}`,
         };
 
-        return {
+        const updatedOrder = {
           ...order,
           status: nextStatus,
           statusHistory: [...order.statusHistory, newHistoryRecord],
         };
+
+        if (nextStatus === 'delivered') {
+          setTimeout(() => syncOrderToCustomerHistory(updatedOrder), 0);
+        }
+
+        return updatedOrder;
       })
     );
   };
@@ -157,20 +175,37 @@ function App() {
     const order = orders.find((o) => o.id === orderId);
     if (!order) return;
 
-    if (newStatus === 'delivered' && !isQualityCheckCompleted(order.qualityChecklist)) {
-      return;
+    if (newStatus === 'delivered') {
+      if (!order.qualityChecklist) {
+        alert('请先完成质检检查清单后再交付');
+        return;
+      }
+      if (hasQualityCheckFailedItems(order.qualityChecklist)) {
+        alert('质检存在不通过项，无法交付。请先修复所有不通过项后再尝试交付。');
+        return;
+      }
+      if (!isQualityCheckCompleted(order.qualityChecklist)) {
+        alert('请先完成所有质检项并确保全部通过后再交付');
+        return;
+      }
     }
 
     setOrders((prev) =>
-      prev.map((order) =>
-        order.id === orderId
-          ? {
-              ...order,
-              status: newStatus,
-              statusHistory: [...order.statusHistory, historyRecord],
-            }
-          : order
-      )
+      prev.map((order) => {
+        if (order.id !== orderId) return order;
+        
+        const updatedOrder = {
+          ...order,
+          status: newStatus,
+          statusHistory: [...order.statusHistory, historyRecord],
+        };
+
+        if (newStatus === 'delivered') {
+          setTimeout(() => syncOrderToCustomerHistory(updatedOrder), 0);
+        }
+
+        return updatedOrder;
+      })
     );
   };
 
@@ -203,6 +238,37 @@ function App() {
       )
     );
     setQuoteTargetOrderId(null);
+  };
+
+  const syncOrderToCustomerHistory = (order: WorkOrder) => {
+    if (!isQualityCheckCompleted(order.qualityChecklist)) return;
+
+    const maintenanceItems = [];
+    if (order.sideEdgeAngle || order.baseEdgeAngle) maintenanceItems.push('修刃');
+    if (order.waxType && order.waxType !== '不打蜡') maintenanceItems.push('打蜡');
+    if (order.baseDamage && order.baseDamage !== '无') maintenanceItems.push('补底');
+    if (order.repairLocation) maintenanceItems.push('修补');
+
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    const historyRecord: CustomerHistoryRecord = {
+      id: `CHR-${Date.now()}`,
+      customerName: '客户',
+      customerPhone: '',
+      brand: order.brand,
+      length: order.length,
+      boardType: order.boardType,
+      maintenanceItems: maintenanceItems.join('、') || '常规维护',
+      waxType: order.waxType,
+      sideEdgeAngle: order.sideEdgeAngle,
+      baseEdgeAngle: order.baseEdgeAngle,
+      deliveryNote: order.qualityChecklist?.overallNote || '',
+      createdAt: dateStr,
+      qualityChecklist: order.qualityChecklist,
+    };
+
+    setCustomerHistory((prev) => [historyRecord, ...prev]);
   };
 
   const handleOpenQaChecklist = (order: WorkOrder) => {
