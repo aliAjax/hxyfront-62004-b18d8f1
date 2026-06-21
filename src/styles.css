@@ -6,6 +6,7 @@
   --secondary: #14b8a6;
   --accent: #f97316;
   --border: #d9e2ef;
+  --error: #dc2626;
 }
 
 * {
@@ -18,7 +19,9 @@ body {
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
 }
 
@@ -29,6 +32,13 @@ button {
   background: #ffffff;
   color: #172033;
   cursor: pointer;
+  padding: 0 14px;
+  transition: all 0.15s ease;
+}
+
+button:hover {
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .app {
@@ -130,6 +140,12 @@ button {
   background: color-mix(in srgb, var(--primary) 8%, #ffffff);
 }
 
+.chips button.active {
+  background: var(--primary);
+  color: #ffffff;
+  border-color: var(--primary);
+}
+
 .heading {
   display: flex;
   align-items: start;
@@ -146,31 +162,117 @@ button {
   background: var(--primary);
   color: #ffffff;
   border-color: var(--primary);
-  padding: 0 14px;
+}
+
+.primary:hover {
+  background: #075985;
+  color: #ffffff;
+  border-color: #075985;
+}
+
+.secondary {
+  background: #ffffff;
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+}
+
+.secondary:hover {
+  background: color-mix(in srgb, var(--primary) 6%, #ffffff);
+}
+
+.form-actions-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.draft-tip {
+  color: var(--secondary);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .field-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+  margin-bottom: 14px;
 }
 
-label {
+.field-grid:last-child {
+  margin-bottom: 0;
+}
+
+.form-field {
   display: grid;
   gap: 8px;
 }
 
-label span {
+.form-field span {
   color: #64748b;
   font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
-input {
+.required {
+  color: var(--error);
+  font-style: normal;
+  font-weight: 700;
+}
+
+input,
+select,
+textarea {
   width: 100%;
   min-height: 42px;
   border-radius: 7px;
   border: 1px solid var(--border);
   padding: 0 12px;
+  background: #ffffff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+textarea {
+  min-height: 84px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent);
+}
+
+.form-field.has-error input,
+.form-field.has-error select,
+.form-field.has-error textarea {
+  border-color: var(--error);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--error) 12%, transparent);
+}
+
+.error-text {
+  color: var(--error);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.form-actions-bottom {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.submit-btn {
+  min-width: 120px;
+  font-weight: 600;
 }
 
 .records {
@@ -182,11 +284,16 @@ input {
   display: grid;
   grid-template-columns: 54px 1fr;
   gap: 14px;
-  align-items: center;
-  padding: 14px;
+  align-items: start;
+  padding: 16px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #fbfdff;
+  transition: box-shadow 0.15s ease;
+}
+
+.records article:hover {
+  box-shadow: 0 4px 16px rgba(31, 41, 55, 0.08);
 }
 
 .records b {
@@ -198,14 +305,50 @@ input {
   background: linear-gradient(135deg, var(--primary), var(--accent));
 }
 
-.records h3 {
+.record-content {
+  min-width: 0;
+}
+
+.record-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   margin-bottom: 6px;
 }
 
-.records p {
+.record-header h3 {
   margin: 0;
+  font-size: 16px;
+}
+
+.status-tag {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.record-main {
+  margin: 0 0 4px 0;
+  color: #172033;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+.record-detail {
+  margin: 0 0 4px 0;
   color: #526071;
   line-height: 1.6;
+  font-size: 14px;
+}
+
+.record-note {
+  margin: 0;
+  color: #64748b;
+  line-height: 1.6;
+  font-size: 13px;
 }
 
 @media (max-width: 860px) {
@@ -218,5 +361,13 @@ input {
   .hero {
     min-height: 210px;
     padding: 24px;
+  }
+
+  .form-actions-bottom {
+    flex-direction: column-reverse;
+  }
+
+  .form-actions-bottom button {
+    width: 100%;
   }
 }
