@@ -44,6 +44,7 @@ class IndexedDBAdapter implements StorageAdapter {
   private storeName = 'keyval';
   private version = 1;
   private dbPromise: Promise<IDBDatabase> | null = null;
+  private localMirror = new LocalStorageAdapter();
 
   private openDB(): Promise<IDBDatabase> {
     if (this.dbPromise) return this.dbPromise;
@@ -66,6 +67,9 @@ class IndexedDBAdapter implements StorageAdapter {
   }
 
   async get<T>(key: string): Promise<T | null> {
+    const mirrored = await this.localMirror.get<T>(key);
+    if (mirrored !== null) return mirrored;
+
     const db = await this.openDB();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(this.storeName, 'readonly');
@@ -78,6 +82,8 @@ class IndexedDBAdapter implements StorageAdapter {
   }
 
   async set<T>(key: string, value: T): Promise<void> {
+    await this.localMirror.set(key, value);
+
     const db = await this.openDB();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(this.storeName, 'readwrite');
@@ -90,6 +96,8 @@ class IndexedDBAdapter implements StorageAdapter {
   }
 
   async remove(key: string): Promise<void> {
+    await this.localMirror.remove(key);
+
     const db = await this.openDB();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(this.storeName, 'readwrite');
@@ -102,6 +110,8 @@ class IndexedDBAdapter implements StorageAdapter {
   }
 
   async clear(): Promise<void> {
+    await this.localMirror.clear();
+
     const db = await this.openDB();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(this.storeName, 'readwrite');
@@ -115,7 +125,7 @@ class IndexedDBAdapter implements StorageAdapter {
 
   async keys(): Promise<string[]> {
     const db = await this.openDB();
-    return new Promise((resolve, reject) => {
+    const idbKeys = await new Promise<string[]>((resolve, reject) => {
       const transaction = db.transaction(this.storeName, 'readonly');
       const store = transaction.objectStore(this.storeName);
       const request = store.getAllKeys();
@@ -123,6 +133,8 @@ class IndexedDBAdapter implements StorageAdapter {
       request.onerror = () => reject(request.error);
       request.onsuccess = () => resolve(request.result as string[]);
     });
+    const mirroredKeys = await this.localMirror.keys();
+    return Array.from(new Set([...idbKeys, ...mirroredKeys]));
   }
 }
 
