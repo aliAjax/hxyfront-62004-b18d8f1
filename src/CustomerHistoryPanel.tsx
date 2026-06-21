@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CustomerHistoryRecord } from './types';
+import { CustomerHistoryRecord, QA_CHECK_ITEMS, isQualityCheckCompleted } from './types';
 
 interface CustomerHistoryPanelProps {
   records: CustomerHistoryRecord[];
@@ -107,7 +107,12 @@ export default function CustomerHistoryPanel({
                         new Date(b.createdAt).getTime() -
                         new Date(a.createdAt).getTime()
                     )
-                    .map((record) => (
+                    .map((record) => {
+                      const hasQa = record.qualityChecklist !== undefined;
+                      const qaCompleted = isQualityCheckCompleted(record.qualityChecklist);
+                      const passedCount = record.qualityChecklist?.items.filter(i => i.status === 'pass').length ?? 0;
+                      
+                      return (
                       <article
                         key={record.id}
                         className={`history-record-item ${selectedRecordId === record.id ? 'selected' : ''}`}
@@ -117,9 +122,23 @@ export default function CustomerHistoryPanel({
                           <span className="history-date">
                             {record.createdAt}
                           </span>
-                          <span className="history-board-tag">
-                            {record.boardType}
-                          </span>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            {hasQa && (
+                              <span
+                                className="history-qa-badge"
+                                title={qaCompleted ? '质检已完成' : '质检进行中'}
+                                style={{
+                                  background: qaCompleted ? '#dcfce7' : '#fef3c7',
+                                  color: qaCompleted ? '#166534' : '#92400e',
+                                }}
+                              >
+                                {qaCompleted ? `✓ 质检${passedCount}/${record.qualityChecklist?.items.length}` : '⏳ 质检中'}
+                              </span>
+                            )}
+                            <span className="history-board-tag">
+                              {record.boardType}
+                            </span>
+                          </div>
                         </div>
                         <p className="history-record-main">
                           {record.brand} · {record.length}cm ·{' '}
@@ -137,13 +156,59 @@ export default function CustomerHistoryPanel({
                             交付备注：{record.deliveryNote}
                           </p>
                         )}
+                        
+                        {selectedRecordId === record.id && hasQa && record.qualityChecklist && (
+                          <div className="history-qa-section">
+                            <div className="history-qa-header">
+                              <span className="history-qa-title">📋 质检记录</span>
+                              {record.qualityChecklist.inspectorName && (
+                                <span className="history-qa-inspector">
+                                  质检员：{record.qualityChecklist.inspectorName}
+                                </span>
+                              )}
+                            </div>
+                            <div className="history-qa-items">
+                              {record.qualityChecklist.items.map((item) => {
+                                const itemIcon = QA_CHECK_ITEMS.find(q => q.key === item.key)?.icon ?? '📋';
+                                return (
+                                  <div key={item.id} className="history-qa-item">
+                                    <div className="history-qa-item-header">
+                                      <span className="history-qa-item-icon">{itemIcon}</span>
+                                      <span className="history-qa-item-label">{item.label}</span>
+                                      <span
+                                        className={`history-qa-item-status ${item.status}`}
+                                      >
+                                        {item.status === 'pass' ? '通过' : item.status === 'fail' ? '不通过' : '待检'}
+                                      </span>
+                                    </div>
+                                    {item.note && (
+                                      <p className="history-qa-item-note">{item.note}</p>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            {record.qualityChecklist.overallNote && (
+                              <div className="history-qa-overall">
+                                <span className="history-qa-overall-label">总体评价：</span>
+                                <span className="history-qa-overall-text">{record.qualityChecklist.overallNote}</span>
+                              </div>
+                            )}
+                            {record.qualityChecklist.completedAt && (
+                              <div className="history-qa-time">
+                                完成时间：{record.qualityChecklist.completedAt}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
                         {selectedRecordId === record.id && (
                           <div className="history-selected-badge">
                             &#10003; 已选择，将回填至工单表单
                           </div>
                         )}
                       </article>
-                    ))}
+                    );})}
                 </div>
               </div>
             );

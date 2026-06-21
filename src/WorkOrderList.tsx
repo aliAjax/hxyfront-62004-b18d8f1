@@ -1,4 +1,4 @@
-import { WorkOrder, DAMAGE_TYPES, SEVERITY_LEVELS, STATUS_CONFIG } from './types';
+import { WorkOrder, DAMAGE_TYPES, SEVERITY_LEVELS, STATUS_CONFIG, isQualityCheckCompleted } from './types';
 
 interface WorkOrderListProps {
   orders: WorkOrder[];
@@ -6,6 +6,7 @@ interface WorkOrderListProps {
   onToggleStatus: (orderId: string) => void;
   editingOrderId: string | null;
   onOpenQuote?: (order: WorkOrder) => void;
+  onOpenQa?: (order: WorkOrder) => void;
 }
 
 const getStatusInfo = (status: string) => {
@@ -22,7 +23,7 @@ const getDamageTypeLabel = (type: string) =>
 const getSeverityLabel = (sev: string) =>
   SEVERITY_LEVELS.find((s) => s.value === sev)?.label ?? sev;
 
-export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, editingOrderId, onOpenQuote }: WorkOrderListProps) {
+export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, editingOrderId, onOpenQuote, onOpenQa }: WorkOrderListProps) {
   return (
     <section className="panel">
       <div className="heading">
@@ -130,6 +131,14 @@ export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, edi
                       onClick={() => onOpenQuote(order)}
                     >
                       🧮 报价
+                    </button>
+                  )}
+                  {onOpenQa && (
+                    <button
+                      className={`secondary small-btn ${isQualityCheckCompleted(order.qualityChecklist) ? 'qa-completed-btn' : ''}`}
+                      onClick={() => onOpenQa(order)}
+                    >
+                      ✅ 质检
                     </button>
                   )}
                   <button

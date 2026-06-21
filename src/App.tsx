@@ -19,7 +19,11 @@ import {
   StatusHistoryRecord,
   STATUS_CONFIG,
   QuoteSummary,
+  QualityChecklist,
+  createEmptyQualityChecklist,
+  isQualityCheckCompleted,
 } from './types';
+import QualityChecklistPanel from './QualityChecklistPanel';
 
 const project = {
   sourceNo: 6,
@@ -43,8 +47,10 @@ function App() {
   const [selectedHistoryRecord, setSelectedHistoryRecord] = useState<CustomerHistoryRecord | null>(null);
   const [editingOrder, setEditingOrder] = useState<WorkOrder | null>(null);
   const [selectedHistoryOrder, setSelectedHistoryOrder] = useState<WorkOrder | null>(null);
+  const [selectedQaOrder, setSelectedQaOrder] = useState<WorkOrder | null>(null);
   const [quoteTargetOrderId, setQuoteTargetOrderId] = useState<string | null>(null);
   const quoteSectionRef = useRef<HTMLDivElement>(null);
+  const qaSectionRef = useRef<HTMLDivElement>(null);
 
   const getNextOrderId = () => {
     let maxNum = 0;
@@ -121,6 +127,10 @@ function App() {
         const nextIndex = (currentIndex + 1) % statusOrder.length;
         const nextStatus = statusOrder[nextIndex];
 
+        if (nextStatus === 'delivered' && !isQualityCheckCompleted(order.qualityChecklist)) {
+          return order;
+        }
+
         const now = new Date();
         const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
@@ -144,6 +154,13 @@ function App() {
   };
 
   const handleMoveOrder = (orderId: string, newStatus: WorkOrderStatus, historyRecord: StatusHistoryRecord) => {
+    const order = orders.find((o) => o.id === orderId);
+    if (!order) return;
+
+    if (newStatus === 'delivered' && !isQualityCheckCompleted(order.qualityChecklist)) {
+      return;
+    }
+
     setOrders((prev) =>
       prev.map((order) =>
         order.id === orderId
@@ -186,6 +203,42 @@ function App() {
       )
     );
     setQuoteTargetOrderId(null);
+  };
+
+  const handleOpenQaChecklist = (order: WorkOrder) => {
+    setSelectedQaOrder(order);
+    if (qaSectionRef.current) {
+      qaSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const handleCreateQaChecklist = () => {
+    if (!selectedQaOrder) return;
+    const checklist = createEmptyQualityChecklist(selectedQaOrder.id);
+    setOrders((prev) =>
+      prev.map((order) =>
+        order.id === selectedQaOrder.id
+          ? { ...order, qualityChecklist: checklist }
+          : order
+      )
+    );
+    setSelectedQaOrder((prev) =>
+      prev ? { ...prev, qualityChecklist: checklist } : null
+    );
+  };
+
+  const handleUpdateQaChecklist = (checklist: QualityChecklist) => {
+    if (!selectedQaOrder) return;
+    setOrders((prev) =>
+      prev.map((order) =>
+        order.id === selectedQaOrder.id
+          ? { ...order, qualityChecklist: checklist }
+          : order
+      )
+    );
+    setSelectedQaOrder((prev) =>
+      prev ? { ...prev, qualityChecklist: checklist } : null
+    );
   };
 
   let filteredOrders = activeFilter
@@ -325,6 +378,7 @@ function App() {
         onMoveOrder={handleMoveOrder}
         onViewHistory={handleViewHistory}
         onOpenQuote={handleOpenQuote}
+        onOpenQa={handleOpenQaChecklist}
       />
 
       <div ref={quoteSectionRef}>
@@ -338,12 +392,25 @@ function App() {
         />
       </div>
 
+      <div ref={qaSectionRef}>
+        {selectedQaOrder && (
+          <QualityChecklistPanel
+            checklist={selectedQaOrder.qualityChecklist}
+            workOrderId={selectedQaOrder.id}
+            workOrderStatus={selectedQaOrder.status}
+            onUpdateChecklist={handleUpdateQaChecklist}
+            onCreateChecklist={handleCreateQaChecklist}
+          />
+        )}
+      </div>
+
       <WorkOrderList
         orders={filteredOrders}
         onEditOrder={handleEditOrder}
         onToggleStatus={handleToggleStatus}
         editingOrderId={editingOrder?.id ?? null}
         onOpenQuote={handleOpenQuote}
+        onOpenQa={handleOpenQaChecklist}
       />
 
       <StatusHistoryModal

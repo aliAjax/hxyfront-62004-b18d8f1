@@ -1,4 +1,4 @@
-import { WorkOrder, DAMAGE_TYPES, SEVERITY_LEVELS, STATUS_CONFIG } from './types';
+import { WorkOrder, DAMAGE_TYPES, SEVERITY_LEVELS, STATUS_CONFIG, isQualityCheckCompleted } from './types';
 
 interface WorkOrderCardProps {
   order: WorkOrder;
@@ -6,6 +6,7 @@ interface WorkOrderCardProps {
   onDragEnd: () => void;
   onViewHistory: (order: WorkOrder) => void;
   onOpenQuote?: (order: WorkOrder) => void;
+  onOpenQa?: (order: WorkOrder) => void;
 }
 
 const getDamageTypeLabel = (type: string) =>
@@ -32,12 +33,14 @@ const getDaysUntilDelivery = (estimatedDelivery: string) => {
   return diffDays;
 };
 
-export default function WorkOrderCard({ order, onDragStart, onDragEnd, onViewHistory, onOpenQuote }: WorkOrderCardProps) {
+export default function WorkOrderCard({ order, onDragStart, onDragEnd, onViewHistory, onOpenQuote, onOpenQa }: WorkOrderCardProps) {
   const hasMarks = order.damageMarks && order.damageMarks.length > 0;
   const statusInfo = STATUS_CONFIG.find((s) => s.value === order.status);
   const overdue = isOverdue(order.estimatedDelivery);
   const daysUntil = getDaysUntilDelivery(order.estimatedDelivery);
   const hasQuote = order.quoteSummary && order.quoteSummary.finalTotal > 0;
+  const qaCompleted = isQualityCheckCompleted(order.qualityChecklist);
+  const hasQa = order.qualityChecklist !== undefined;
 
   return (
     <article
@@ -52,15 +55,29 @@ export default function WorkOrderCard({ order, onDragStart, onDragEnd, onViewHis
     >
       <div className="kanban-card-header">
         <h3 className="kanban-card-id">{order.id}</h3>
-        <span
-          className="kanban-card-status"
-          style={{
-            backgroundColor: (statusInfo?.color ?? '#64748b') + '15',
-            color: statusInfo?.color ?? '#64748b',
-          }}
-        >
-          {statusInfo?.icon} {statusInfo?.label}
-        </span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {hasQa && (
+            <span
+              className="kanban-card-qa-badge"
+              title={qaCompleted ? '质检已完成' : '质检进行中'}
+              style={{
+                backgroundColor: qaCompleted ? '#dcfce7' : '#fef3c7',
+                color: qaCompleted ? '#166534' : '#92400e',
+              }}
+            >
+              {qaCompleted ? '✓ 质检完成' : '⏳ 质检中'}
+            </span>
+          )}
+          <span
+            className="kanban-card-status"
+            style={{
+              backgroundColor: (statusInfo?.color ?? '#64748b') + '15',
+              color: statusInfo?.color ?? '#64748b',
+            }}
+          >
+            {statusInfo?.icon} {statusInfo?.label}
+          </span>
+        </div>
       </div>
 
       <div className="kanban-card-board">
@@ -169,6 +186,17 @@ export default function WorkOrderCard({ order, onDragStart, onDragEnd, onViewHis
               }}
             >
               🧮 报价
+            </button>
+          )}
+          {onOpenQa && (
+            <button
+              className={`card-history-btn ${qaCompleted ? 'qa-completed-btn' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenQa(order);
+              }}
+            >
+              ✅ 质检
             </button>
           )}
           <button

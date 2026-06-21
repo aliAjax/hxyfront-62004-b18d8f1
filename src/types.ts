@@ -5,6 +5,58 @@ export type WorkOrderStatus =
   | 'pending_qa'
   | 'delivered';
 
+export type QaCheckItemStatus = 'pass' | 'fail' | 'pending';
+
+export interface QaCheckItem {
+  id: string;
+  key: string;
+  label: string;
+  status: QaCheckItemStatus;
+  note: string;
+}
+
+export interface QualityChecklist {
+  id: string;
+  workOrderId: string;
+  items: QaCheckItem[];
+  photoUrls: string[];
+  overallNote: string;
+  completedAt: string | null;
+  inspectorName: string;
+}
+
+export const QA_CHECK_ITEMS: { key: string; label: string; icon: string }[] = [
+  { key: 'edge_angle', label: '刃角复核', icon: '📐' },
+  { key: 'wax_layer', label: '蜡层状态', icon: '🧴' },
+  { key: 'base_flatness', label: '底板平整度', icon: '📏' },
+  { key: 'repair_location', label: '修补位置', icon: '🔧' },
+  { key: 'customer_preference', label: '客户偏好', icon: '👤' },
+  { key: 'photo_note', label: '照片备注', icon: '📷' },
+];
+
+export const createEmptyQualityChecklist = (workOrderId: string): QualityChecklist => {
+  return {
+    id: `QC-${workOrderId}-${Date.now()}`,
+    workOrderId,
+    items: QA_CHECK_ITEMS.map((item, index) => ({
+      id: `QCI-${workOrderId}-${index}`,
+      key: item.key,
+      label: item.label,
+      status: 'pending',
+      note: '',
+    })),
+    photoUrls: [],
+    overallNote: '',
+    completedAt: null,
+    inspectorName: '',
+  };
+};
+
+export const isQualityCheckCompleted = (checklist?: QualityChecklist): boolean => {
+  if (!checklist) return false;
+  return checklist.completedAt !== null && checklist.items.every((item) => item.status !== 'pending');
+};
+
 export interface StatusHistoryRecord {
   id: string;
   fromStatus: WorkOrderStatus | null;
@@ -42,6 +94,7 @@ export interface WorkOrder {
   damageMarks: BaseDamageMark[];
   statusHistory: StatusHistoryRecord[];
   quoteSummary?: QuoteSummary;
+  qualityChecklist?: QualityChecklist;
 }
 
 export interface WorkOrderFormData {
@@ -260,6 +313,22 @@ export const initialWorkOrders: WorkOrder[] = [
         note: '质检通过，已交付客户',
       },
     ],
+    qualityChecklist: {
+      id: 'QC-ORD-106-001',
+      workOrderId: 'ORD-106',
+      items: [
+        { id: 'QCI-106-1', key: 'edge_angle', label: '刃角复核', status: 'pass', note: '侧刃88°、底刃1°符合要求，刃口锐利均匀' },
+        { id: 'QCI-106-2', key: 'wax_layer', label: '蜡层状态', status: 'pass', note: '低温蜡涂刷均匀，无漏涂' },
+        { id: 'QCI-106-3', key: 'base_flatness', label: '底板平整度', status: 'pass', note: '底板平整，无翘曲' },
+        { id: 'QCI-106-4', key: 'repair_location', label: '修补位置', status: 'pass', note: '板腰划痕修补平整，与原底板过渡自然' },
+        { id: 'QCI-106-5', key: 'customer_preference', label: '客户偏好', status: 'pass', note: '中等咬雪偏好已满足' },
+        { id: 'QCI-106-6', key: 'photo_note', label: '照片备注', status: 'pass', note: '已拍摄修复前后对比照' },
+      ],
+      photoUrls: [],
+      overallNote: '整体质量良好，符合交付标准。底板修补处处理细致，刃角精度达标。',
+      completedAt: '2024-01-16 14:30',
+      inspectorName: '张技师',
+    },
   },
   {
     id: 'ORD-112',
@@ -442,6 +511,22 @@ export const initialWorkOrders: WorkOrder[] = [
         note: '打蜡完成，转质检',
       },
     ],
+    qualityChecklist: {
+      id: 'QC-ORD-131-001',
+      workOrderId: 'ORD-131',
+      items: [
+        { id: 'QCI-131-1', key: 'edge_angle', label: '刃角复核', status: 'pending', note: '' },
+        { id: 'QCI-131-2', key: 'wax_layer', label: '蜡层状态', status: 'pending', note: '' },
+        { id: 'QCI-131-3', key: 'base_flatness', label: '底板平整度', status: 'pending', note: '' },
+        { id: 'QCI-131-4', key: 'repair_location', label: '修补位置', status: 'pending', note: '' },
+        { id: 'QCI-131-5', key: 'customer_preference', label: '客户偏好', status: 'pending', note: '' },
+        { id: 'QCI-131-6', key: 'photo_note', label: '照片备注', status: 'pending', note: '' },
+      ],
+      photoUrls: [],
+      overallNote: '',
+      completedAt: null,
+      inspectorName: '',
+    },
   },
   {
     id: 'ORD-142',
@@ -536,6 +621,22 @@ export const initialWorkOrders: WorkOrder[] = [
         note: '质检通过，已交付',
       },
     ],
+    qualityChecklist: {
+      id: 'QC-ORD-156-001',
+      workOrderId: 'ORD-156',
+      items: [
+        { id: 'QCI-156-1', key: 'edge_angle', label: '刃角复核', status: 'pass', note: '侧刃88°、底刃1°，刃口锋利度均匀' },
+        { id: 'QCI-156-2', key: 'wax_layer', label: '蜡层状态', status: 'pass', note: '低温蜡层均匀，光泽度良好' },
+        { id: 'QCI-156-3', key: 'base_flatness', label: '底板平整度', status: 'pass', note: '底板平整，无变形' },
+        { id: 'QCI-156-4', key: 'repair_location', label: '修补位置', status: 'pass', note: '无修补，底板完好' },
+        { id: 'QCI-156-5', key: 'customer_preference', label: '客户偏好', status: 'pass', note: '中等咬雪偏好已满足' },
+        { id: 'QCI-156-6', key: 'photo_note', label: '照片备注', status: 'pass', note: '已拍摄整体外观照' },
+      ],
+      photoUrls: [],
+      overallNote: '雪板状态良好，保养到位，刃角精准，蜡层均匀。',
+      completedAt: '2024-01-13 15:30',
+      inspectorName: '李技师',
+    },
   },
 ];
 
@@ -552,6 +653,7 @@ export interface CustomerHistoryRecord {
   baseEdgeAngle: string;
   deliveryNote: string;
   createdAt: string;
+  qualityChecklist?: QualityChecklist;
 }
 
 export const initialCustomerHistory: CustomerHistoryRecord[] = [
@@ -568,6 +670,22 @@ export const initialCustomerHistory: CustomerHistoryRecord[] = [
     baseEdgeAngle: '1°',
     deliveryNote: '客户偏好中等咬雪，侧刃不要太锐，下次维护前可保持当前角度',
     createdAt: '2024-01-10',
+    qualityChecklist: {
+      id: 'QC-CHR-001',
+      workOrderId: 'CHR-001',
+      items: [
+        { id: 'QCI-CHR001-1', key: 'edge_angle', label: '刃角复核', status: 'pass', note: '侧刃88°、底刃1°，符合中等咬雪偏好' },
+        { id: 'QCI-CHR001-2', key: 'wax_layer', label: '蜡层状态', status: 'pass', note: '低温蜡层均匀，光泽度良好' },
+        { id: 'QCI-CHR001-3', key: 'base_flatness', label: '底板平整度', status: 'pass', note: '底板平整，无翘曲' },
+        { id: 'QCI-CHR001-4', key: 'repair_location', label: '修补位置', status: 'pass', note: '底板修补处过渡自然，无明显凹凸' },
+        { id: 'QCI-CHR001-5', key: 'customer_preference', label: '客户偏好', status: 'pass', note: '中等咬雪偏好已满足，刃角适中' },
+        { id: 'QCI-CHR001-6', key: 'photo_note', label: '照片备注', status: 'pass', note: '已拍摄修复前后对比照片存档' },
+      ],
+      photoUrls: [],
+      overallNote: '整体质量良好，修刃、打蜡、补底均符合标准。客户中等咬雪偏好已满足。',
+      completedAt: '2024-01-10 15:00',
+      inspectorName: '张技师',
+    },
   },
   {
     id: 'CHR-002',
@@ -596,6 +714,22 @@ export const initialCustomerHistory: CustomerHistoryRecord[] = [
     baseEdgeAngle: '0.5°',
     deliveryNote: '竞技选手，要求极致锐利刃角，氟素蜡提高滑速，交付前确认刃角精度',
     createdAt: '2024-01-08',
+    qualityChecklist: {
+      id: 'QC-CHR-003',
+      workOrderId: 'CHR-003',
+      items: [
+        { id: 'QCI-CHR003-1', key: 'edge_angle', label: '刃角复核', status: 'pass', note: '侧刃87°、底刃0.5°，竞技级精度，刃口极度锐利' },
+        { id: 'QCI-CHR003-2', key: 'wax_layer', label: '蜡层状态', status: 'pass', note: '氟素蜡涂刷均匀，高速滑行性能佳' },
+        { id: 'QCI-CHR003-3', key: 'base_flatness', label: '底板平整度', status: 'pass', note: '底板平整度优秀，无任何变形' },
+        { id: 'QCI-CHR003-4', key: 'repair_location', label: '修补位置', status: 'pass', note: '无修补项' },
+        { id: 'QCI-CHR003-5', key: 'customer_preference', label: '客户偏好', status: 'pass', note: '竞技选手强咬雪需求已完全满足' },
+        { id: 'QCI-CHR003-6', key: 'photo_note', label: '照片备注', status: 'pass', note: '刃角测量照片、整体外观照已存档' },
+      ],
+      photoUrls: [],
+      overallNote: '竞技级调校完成，刃角精度达到比赛标准。氟素蜡层均匀，滑行速度有保障。',
+      completedAt: '2024-01-08 16:30',
+      inspectorName: '李技师',
+    },
   },
   {
     id: 'CHR-004',
