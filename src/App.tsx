@@ -29,10 +29,12 @@ const project = {
 function App() {
   const [orders, setOrders] = useState<WorkOrder[]>(initialWorkOrders);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const [selectedEdgeParam, setSelectedEdgeParam] = useState<EdgeAngleParam | null>(null);
   const [edgeParams] = useState<EdgeAngleParam[]>(initialEdgeAngleParams);
   const [customerHistory] = useState<CustomerHistoryRecord[]>(initialCustomerHistory);
   const [selectedHistoryRecord, setSelectedHistoryRecord] = useState<CustomerHistoryRecord | null>(null);
+  const [editingOrder, setEditingOrder] = useState<WorkOrder | null>(null);
 
   const getNextOrderId = () => {
     let maxNum = 0;
@@ -46,20 +48,54 @@ function App() {
     return `ORD-${maxNum + 1}`;
   };
 
-  const handleSubmit = (formData: WorkOrderFormData) => {
-    const newOrder: WorkOrder = {
-      ...formData,
-      id: getNextOrderId(),
-      status: 'pending',
-      createdAt: new Date().toISOString().split('T')[0],
-    };
-    setOrders([newOrder, ...orders]);
+  const handleSubmit = (formData: WorkOrderFormData, editingId?: string) => {
+    if (editingId) {
+      setOrders((prev) =>
+        prev.map((order) =>
+          order.id === editingId
+            ? { ...order, ...formData }
+            : order
+        )
+      );
+      setEditingOrder(null);
+    } else {
+      const newOrder: WorkOrder = {
+        ...formData,
+        id: getNextOrderId(),
+        status: 'pending',
+        createdAt: new Date().toISOString().split('T')[0],
+      };
+      setOrders([newOrder, ...orders]);
+    }
     setSelectedHistoryRecord(null);
   };
 
-  const filteredOrders = activeFilter
+  const handleEditOrder = (order: WorkOrder) => {
+    setEditingOrder(order);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleToggleStatus = (orderId: string) => {
+    setOrders((prev) =>
+      prev.map((order) =>
+        order.id === orderId
+          ? { ...order, status: order.status === 'pending' ? 'completed' : 'pending' }
+          : order
+      )
+    );
+  };
+
+  const handleCancelEdit = () => {
+    setEditingOrder(null);
+  };
+
+  let filteredOrders = activeFilter
     ? orders.filter((order) => order.boardType === activeFilter)
     : orders;
+
+  if (statusFilter !== 'all') {
+    filteredOrders = filteredOrders.filter((o) => o.status === statusFilter);
+  }
 
   const pendingCount = orders.filter((o) => o.status === 'pending').length;
   const completedCount = orders.filter((o) => o.status === 'completed').length;
@@ -73,7 +109,9 @@ function App() {
       ).toFixed(1)
     : 0;
 
-  const repairCount = orders.filter((o) => o.baseDamage && o.baseDamage !== '无').length;
+  const repairCount = orders.filter(
+    (o) => (o.baseDamage && o.baseDamage !== '无') || (o.damageMarks && o.damageMarks.length > 0)
+  ).length;
 
   const handleSelectEdgeParam = (param: EdgeAngleParam) => {
     setSelectedEdgeParam(param);
@@ -132,9 +170,37 @@ function App() {
               </button>
             ))}
           </div>
+
+          <h2 style={{ marginTop: 20 }}>完工状态</h2>
+          <div className="chips">
+            <button
+              className={statusFilter === 'all' ? 'active' : ''}
+              onClick={() => setStatusFilter('all')}
+            >
+              全部
+            </button>
+            <button
+              className={statusFilter === 'pending' ? 'active' : ''}
+              onClick={() => setStatusFilter('pending')}
+            >
+              待维护
+            </button>
+            <button
+              className={statusFilter === 'completed' ? 'active' : ''}
+              onClick={() => setStatusFilter('completed')}
+            >
+              已完工
+            </button>
+          </div>
         </aside>
 
-        <WorkOrderForm onSubmit={handleSubmit} selectedEdgeParam={selectedEdgeParam} historyFill={selectedHistoryRecord} />
+        <WorkOrderForm
+          onSubmit={handleSubmit}
+          selectedEdgeParam={selectedEdgeParam}
+          historyFill={selectedHistoryRecord}
+          editingOrder={editingOrder}
+          onCancelEdit={handleCancelEdit}
+        />
       </section>
 
       <CustomerHistoryPanel
@@ -145,7 +211,12 @@ function App() {
 
       <EdgeAngleTable params={edgeParams} onSelectParam={handleSelectEdgeParam} />
 
-      <WorkOrderList orders={filteredOrders} />
+      <WorkOrderList
+        orders={filteredOrders}
+        onEditOrder={handleEditOrder}
+        onToggleStatus={handleToggleStatus}
+        editingOrderId={editingOrder?.id ?? null}
+      />
     </main>
   );
 }

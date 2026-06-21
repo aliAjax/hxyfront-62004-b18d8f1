@@ -11,6 +11,7 @@ export interface WorkOrder {
   customerPreference: string;
   status: 'pending' | 'completed';
   createdAt: string;
+  damageMarks: BaseDamageMark[];
 }
 
 export interface WorkOrderFormData {
@@ -23,7 +24,46 @@ export interface WorkOrderFormData {
   baseDamage: string;
   repairLocation: string;
   customerPreference: string;
+  damageMarks: BaseDamageMark[];
 }
+
+export type DamageType = 'scratch' | 'dent' | 'burn' | 'edgeDelam';
+
+export type SeverityLevel = 'mild' | 'moderate' | 'severe';
+
+export interface BaseDamageMark {
+  id: string;
+  type: DamageType;
+  x: number;
+  y: number;
+  locationNote: string;
+  length: string;
+  severity: SeverityLevel;
+  repairMethod: string;
+}
+
+export const DAMAGE_TYPES: { value: DamageType; label: string; color: string; icon: string }[] = [
+  { value: 'scratch', label: '划痕', color: '#f97316', icon: '〰' },
+  { value: 'dent', label: '凹坑', color: '#dc2626', icon: '●' },
+  { value: 'burn', label: '烧伤', color: '#7c3aed', icon: '✦' },
+  { value: 'edgeDelam', label: '边缘脱层', color: '#0891b2', icon: '◢' },
+];
+
+export const SEVERITY_LEVELS: { value: SeverityLevel; label: string }[] = [
+  { value: 'mild', label: '轻微' },
+  { value: 'moderate', label: '中等' },
+  { value: 'severe', label: '严重' },
+];
+
+export const REPAIR_METHODS = [
+  'P-Tex填充',
+  '环氧树脂修补',
+  '底座打磨',
+  '边缘焊接',
+  '重新压合',
+  '整块更换',
+  '其他',
+];
 
 export const BOARD_TYPES = ['全地域', '公园板', '竞速板', '粉雪板'];
 
@@ -131,6 +171,18 @@ export const initialWorkOrders: WorkOrder[] = [
     customerPreference: '中等咬雪',
     status: 'completed',
     createdAt: '2024-01-15',
+    damageMarks: [
+      {
+        id: 'DM-106-1',
+        type: 'scratch',
+        x: 42,
+        y: 55,
+        locationNote: '板腰中部偏左',
+        length: '3',
+        severity: 'mild',
+        repairMethod: '底座打磨',
+      },
+    ],
   },
   {
     id: 'ORD-112',
@@ -145,6 +197,28 @@ export const initialWorkOrders: WorkOrder[] = [
     customerPreference: '强咬雪',
     status: 'pending',
     createdAt: '2024-01-18',
+    damageMarks: [
+      {
+        id: 'DM-112-1',
+        type: 'scratch',
+        x: 68,
+        y: 78,
+        locationNote: '板尾右侧边缘',
+        length: '12',
+        severity: 'moderate',
+        repairMethod: 'P-Tex填充',
+      },
+      {
+        id: 'DM-112-2',
+        type: 'edgeDelam',
+        x: 88,
+        y: 82,
+        locationNote: '板尾右刃',
+        length: '5',
+        severity: 'moderate',
+        repairMethod: '边缘焊接',
+      },
+    ],
   },
   {
     id: 'ORD-118',
@@ -159,6 +233,7 @@ export const initialWorkOrders: WorkOrder[] = [
     customerPreference: '弱咬雪',
     status: 'pending',
     createdAt: '2024-01-20',
+    damageMarks: [],
   },
 ];
 
@@ -288,4 +363,5 @@ export const emptyFormData: WorkOrderFormData = {
   baseDamage: '',
   repairLocation: '',
   customerPreference: '',
+  damageMarks: [],
 };

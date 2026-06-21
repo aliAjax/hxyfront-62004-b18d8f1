@@ -7,12 +7,16 @@ import {
   REPAIR_LOCATIONS,
   EdgeAngleParam,
   CustomerHistoryRecord,
+  WorkOrder,
 } from './types';
+import BaseDamageMarker from './BaseDamageMarker';
 
 interface WorkOrderFormProps {
-  onSubmit: (data: WorkOrderFormData) => void;
+  onSubmit: (data: WorkOrderFormData, editingId?: string) => void;
   selectedEdgeParam: EdgeAngleParam | null;
   historyFill: CustomerHistoryRecord | null;
+  editingOrder: WorkOrder | null;
+  onCancelEdit?: () => void;
 }
 
 const DRAFT_KEY = 'work-order-draft';
@@ -36,26 +40,37 @@ const FIELD_LABELS: Record<keyof WorkOrderFormData, string> = {
   baseDamage: '底板损伤描述',
   repairLocation: '修补位置',
   customerPreference: '客户偏好',
+  damageMarks: '损伤标记',
 };
 
-export default function WorkOrderForm({ onSubmit, selectedEdgeParam, historyFill }: WorkOrderFormProps) {
+export default function WorkOrderForm({ onSubmit, selectedEdgeParam, historyFill, editingOrder, onCancelEdit }: WorkOrderFormProps) {
   const [formData, setFormData] = useState<WorkOrderFormData>(emptyFormData);
   const [errors, setErrors] = useState<Partial<Record<keyof WorkOrderFormData, string>>>({});
   const [draftSaved, setDraftSaved] = useState(false);
 
   useEffect(() => {
-    const savedDraft = localStorage.getItem(DRAFT_KEY);
-    if (savedDraft) {
-      try {
-        setFormData(JSON.parse(savedDraft));
-      } catch {
-        // ignore parse error
-      }
+    if (editingOrder) {
+      const { id, status, createdAt, ...rest } = editingOrder;
+      setFormData(rest);
+      setErrors({});
     }
-  }, []);
+  }, [editingOrder]);
 
   useEffect(() => {
-    if (selectedEdgeParam) {
+    if (!editingOrder) {
+      const savedDraft = localStorage.getItem(DRAFT_KEY);
+      if (savedDraft) {
+        try {
+          setFormData(JSON.parse(savedDraft));
+        } catch {
+          // ignore parse error
+        }
+      }
+    }
+  }, [editingOrder]);
+
+  useEffect(() => {
+    if (selectedEdgeParam && !editingOrder) {
       setFormData((prev) => ({
         ...prev,
         sideEdgeAngle: selectedEdgeParam.sideEdgeAngle,
@@ -63,10 +78,10 @@ export default function WorkOrderForm({ onSubmit, selectedEdgeParam, historyFill
         boardType: selectedEdgeParam.boardType,
       }));
     }
-  }, [selectedEdgeParam]);
+  }, [selectedEdgeParam, editingOrder]);
 
   useEffect(() => {
-    if (historyFill) {
+    if (historyFill && !editingOrder) {
       setFormData((prev) => ({
         ...prev,
         brand: historyFill.brand,
@@ -78,7 +93,7 @@ export default function WorkOrderForm({ onSubmit, selectedEdgeParam, historyFill
         customerPreference: historyFill.deliveryNote,
       }));
     }
-  }, [historyFill]);
+  }, [historyFill, editingOrder]);
 
   const handleChange = (field: keyof WorkOrderFormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -89,6 +104,11 @@ export default function WorkOrderForm({ onSubmit, selectedEdgeParam, historyFill
         return next;
       });
     }
+    setDraftSaved(false);
+  };
+
+  const handleMarksChange = (marks: typeof formData.damageMarks) => {
+    setFormData((prev) => ({ ...prev, damageMarks: marks }));
     setDraftSaved(false);
   };
 
@@ -105,7 +125,7 @@ export default function WorkOrderForm({ onSubmit, selectedEdgeParam, historyFill
 
   const handleSubmit = () => {
     if (!validate()) return;
-    onSubmit(formData);
+    onSubmit(formData, editingOrder?.id);
     setFormData(emptyFormData);
     setErrors({});
     setDraftSaved(false);
@@ -117,9 +137,11 @@ export default function WorkOrderForm({ onSubmit, selectedEdgeParam, historyFill
     setErrors({});
     setDraftSaved(false);
     localStorage.removeItem(DRAFT_KEY);
+    if (onCancelEdit) onCancelEdit();
   };
 
   const handleSaveDraft = () => {
+    if (editingOrder) return;
     localStorage.setItem(DRAFT_KEY, JSON.stringify(formData));
     setDraftSaved(true);
     setTimeout(() => setDraftSaved(false), 2000);
@@ -192,13 +214,25 @@ export default function WorkOrderForm({ onSubmit, selectedEdgeParam, historyFill
       <div className="heading">
         <div>
           <p>专业字段</p>
-          <h2>创建工单</h2>
+          <h2>{editingOrder ? `编辑工单 ${editingOrder.id}` : '创建工单'}</h2>
+          {editingOrder && (
+            <span style={{ fontSize: 13, color: '#64748b' }}>
+              状态：{editingOrder.status === 'pending' ? '待维护' : '已完工'} · 创建：{editingOrder.createdAt}
+            </span>
+          )}
         </div>
         <div className="form-actions-top">
           {draftSaved && <span className="draft-tip">草稿已保存</span>}
-          <button className="secondary" onClick={handleSaveDraft}>
-            保存草稿
-          </button>
+          {!editingOrder && (
+            <button className="secondary" onClick={handleSaveDraft}>
+              保存草稿
+            </button>
+          )}
+          {editingOrder && onCancelEdit && (
+            <button className="secondary" onClick={onCancelEdit}>
+              取消编辑
+            </button>
+          )}
         </div>
       </div>
 
@@ -220,12 +254,19 @@ export default function WorkOrderForm({ onSubmit, selectedEdgeParam, historyFill
         {renderField('customerPreference', 'text')}
       </div>
 
+      <div style={{ marginTop: 8 }}>
+        <BaseDamageMarker
+          marks={formData.damageMarks}
+          onChange={handleMarksChange}
+        />
+      </div>
+
       <div className="form-actions-bottom">
         <button className="secondary" onClick={handleClear}>
-          清空表单
+          {editingOrder ? '重置修改' : '清空表单'}
         </button>
         <button className="primary submit-btn" onClick={handleSubmit}>
-          提交工单
+          {editingOrder ? '保存修改' : '提交工单'}
         </button>
       </div>
     </section>
