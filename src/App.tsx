@@ -113,62 +113,58 @@ function App() {
   };
 
   const handleToggleStatus = (orderId: string) => {
+    const currentOrder = orders.find((order) => order.id === orderId);
+    if (!currentOrder) return;
+
+    const statusOrder: WorkOrderStatus[] = [
+      'pending_inspection',
+      'pending_wax',
+      'pending_base_repair',
+      'pending_qa',
+      'delivered',
+    ];
+    const currentIndex = statusOrder.indexOf(currentOrder.status);
+    const nextIndex = (currentIndex + 1) % statusOrder.length;
+    const nextStatus = statusOrder[nextIndex];
+
+    if (nextStatus === 'delivered') {
+      if (!currentOrder.qualityChecklist) {
+        alert('请先完成质检检查清单后再交付');
+        return;
+      }
+      if (hasQualityCheckFailedItems(currentOrder.qualityChecklist)) {
+        alert('质检存在不通过项，无法交付。请先修复所有不通过项后再尝试交付。');
+        return;
+      }
+      if (!isQualityCheckCompleted(currentOrder.qualityChecklist)) {
+        alert('请先完成所有质检项并确保全部通过后再交付');
+        return;
+      }
+    }
+
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const targetLabel = STATUS_CONFIG.find((s) => s.value === nextStatus)?.label ?? nextStatus;
+    const newHistoryRecord: StatusHistoryRecord = {
+      id: `SH-${currentOrder.id}-${Date.now()}`,
+      fromStatus: currentOrder.status,
+      toStatus: nextStatus,
+      timestamp,
+      note: `移至${targetLabel}`,
+    };
+    const updatedOrder: WorkOrder = {
+      ...currentOrder,
+      status: nextStatus,
+      statusHistory: [...currentOrder.statusHistory, newHistoryRecord],
+    };
+
     setOrders((prev) =>
-      prev.map((order) => {
-        if (order.id !== orderId) return order;
-
-        const statusOrder: WorkOrderStatus[] = [
-          'pending_inspection',
-          'pending_wax',
-          'pending_base_repair',
-          'pending_qa',
-          'delivered',
-        ];
-        const currentIndex = statusOrder.indexOf(order.status);
-        const nextIndex = (currentIndex + 1) % statusOrder.length;
-        const nextStatus = statusOrder[nextIndex];
-
-        if (nextStatus === 'delivered') {
-          if (!order.qualityChecklist) {
-            alert('请先完成质检检查清单后再交付');
-            return order;
-          }
-          if (hasQualityCheckFailedItems(order.qualityChecklist)) {
-            alert('质检存在不通过项，无法交付。请先修复所有不通过项后再尝试交付。');
-            return order;
-          }
-          if (!isQualityCheckCompleted(order.qualityChecklist)) {
-            alert('请先完成所有质检项并确保全部通过后再交付');
-            return order;
-          }
-        }
-
-        const now = new Date();
-        const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-        const targetLabel = STATUS_CONFIG.find((s) => s.value === nextStatus)?.label ?? nextStatus;
-
-        const newHistoryRecord: StatusHistoryRecord = {
-          id: `SH-${order.id}-${Date.now()}`,
-          fromStatus: order.status,
-          toStatus: nextStatus,
-          timestamp,
-          note: `移至${targetLabel}`,
-        };
-
-        const updatedOrder = {
-          ...order,
-          status: nextStatus,
-          statusHistory: [...order.statusHistory, newHistoryRecord],
-        };
-
-        if (nextStatus === 'delivered') {
-          setTimeout(() => syncOrderToCustomerHistory(updatedOrder), 0);
-        }
-
-        return updatedOrder;
-      })
+      prev.map((order) => (order.id === orderId ? updatedOrder : order))
     );
+
+    if (nextStatus === 'delivered') {
+      syncOrderToCustomerHistory(updatedOrder);
+    }
   };
 
   const handleMoveOrder = (orderId: string, newStatus: WorkOrderStatus, historyRecord: StatusHistoryRecord) => {
@@ -190,23 +186,19 @@ function App() {
       }
     }
 
+    const updatedOrder: WorkOrder = {
+      ...order,
+      status: newStatus,
+      statusHistory: [...order.statusHistory, historyRecord],
+    };
+
     setOrders((prev) =>
-      prev.map((order) => {
-        if (order.id !== orderId) return order;
-        
-        const updatedOrder = {
-          ...order,
-          status: newStatus,
-          statusHistory: [...order.statusHistory, historyRecord],
-        };
-
-        if (newStatus === 'delivered') {
-          setTimeout(() => syncOrderToCustomerHistory(updatedOrder), 0);
-        }
-
-        return updatedOrder;
-      })
+      prev.map((order) => (order.id === orderId ? updatedOrder : order))
     );
+
+    if (newStatus === 'delivered') {
+      syncOrderToCustomerHistory(updatedOrder);
+    }
   };
 
   const handleViewHistory = (order: WorkOrder) => {
@@ -253,7 +245,7 @@ function App() {
     const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
     const historyRecord: CustomerHistoryRecord = {
-      id: `CHR-${Date.now()}`,
+      id: `CHR-${order.id}`,
       customerName: '客户',
       customerPhone: '',
       brand: order.brand,
@@ -268,7 +260,21 @@ function App() {
       qualityChecklist: order.qualityChecklist,
     };
 
-    setCustomerHistory((prev) => [historyRecord, ...prev]);
+    setCustomerHistory((prev) => {
+      const existingIndex = prev.findIndex(
+        (record) =>
+          record.id === historyRecord.id ||
+          record.qualityChecklist?.workOrderId === order.id
+      );
+
+      if (existingIndex === -1) {
+        return [historyRecord, ...prev];
+      }
+
+      const next = [...prev];
+      next.splice(existingIndex, 1);
+      return [historyRecord, ...next];
+    });
   };
 
   const handleOpenQaChecklist = (order: WorkOrder) => {
@@ -295,16 +301,21 @@ function App() {
 
   const handleUpdateQaChecklist = (checklist: QualityChecklist) => {
     if (!selectedQaOrder) return;
+    const currentOrder = orders.find((order) => order.id === selectedQaOrder.id) ?? selectedQaOrder;
+    const updatedOrder: WorkOrder = { ...currentOrder, qualityChecklist: checklist };
+
     setOrders((prev) =>
       prev.map((order) =>
         order.id === selectedQaOrder.id
-          ? { ...order, qualityChecklist: checklist }
+          ? updatedOrder
           : order
       )
     );
-    setSelectedQaOrder((prev) =>
-      prev ? { ...prev, qualityChecklist: checklist } : null
-    );
+    setSelectedQaOrder(updatedOrder);
+
+    if (isQualityCheckCompleted(checklist)) {
+      syncOrderToCustomerHistory(updatedOrder);
+    }
   };
 
   let filteredOrders = activeFilter
