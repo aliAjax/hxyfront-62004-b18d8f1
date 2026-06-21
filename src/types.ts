@@ -1,3 +1,18 @@
+export type WorkOrderStatus =
+  | 'pending_inspection'
+  | 'pending_wax'
+  | 'pending_base_repair'
+  | 'pending_qa'
+  | 'delivered';
+
+export interface StatusHistoryRecord {
+  id: string;
+  fromStatus: WorkOrderStatus | null;
+  toStatus: WorkOrderStatus;
+  timestamp: string;
+  note?: string;
+}
+
 export interface WorkOrder {
   id: string;
   brand: string;
@@ -9,9 +24,12 @@ export interface WorkOrder {
   baseDamage: string;
   repairLocation: string;
   customerPreference: string;
-  status: 'pending' | 'completed';
+  status: WorkOrderStatus;
   createdAt: string;
+  estimatedDelivery: string;
+  riskWarning: string;
   damageMarks: BaseDamageMark[];
+  statusHistory: StatusHistoryRecord[];
 }
 
 export interface WorkOrderFormData {
@@ -70,6 +88,14 @@ export const BOARD_TYPES = ['全地域', '公园板', '竞速板', '粉雪板'];
 export const WAX_TYPES = ['低温蜡', '中温蜡', '高温蜡', '氟素蜡', '无氟蜡'];
 
 export const REPAIR_LOCATIONS = ['板头', '板尾', '板腰', '全板'];
+
+export const STATUS_CONFIG: { value: WorkOrderStatus; label: string; color: string; icon: string }[] = [
+  { value: 'pending_inspection', label: '待检查', color: '#64748b', icon: '🔍' },
+  { value: 'pending_wax', label: '待打蜡', color: '#f97316', icon: '🧴' },
+  { value: 'pending_base_repair', label: '待补底', color: '#dc2626', icon: '🔧' },
+  { value: 'pending_qa', label: '待质检', color: '#7c3aed', icon: '✅' },
+  { value: 'delivered', label: '已交付', color: '#14b8a6', icon: '📦' },
+];
 
 export interface EdgeAngleParam {
   id: string;
@@ -169,8 +195,10 @@ export const initialWorkOrders: WorkOrder[] = [
     baseDamage: '轻微划痕',
     repairLocation: '板腰',
     customerPreference: '中等咬雪',
-    status: 'completed',
+    status: 'delivered',
     createdAt: '2024-01-15',
+    estimatedDelivery: '2024-01-17',
+    riskWarning: '',
     damageMarks: [
       {
         id: 'DM-106-1',
@@ -181,6 +209,43 @@ export const initialWorkOrders: WorkOrder[] = [
         length: '3',
         severity: 'mild',
         repairMethod: '底座打磨',
+      },
+    ],
+    statusHistory: [
+      {
+        id: 'SH-106-1',
+        fromStatus: null,
+        toStatus: 'pending_inspection',
+        timestamp: '2024-01-15 09:00',
+        note: '工单创建',
+      },
+      {
+        id: 'SH-106-2',
+        fromStatus: 'pending_inspection',
+        toStatus: 'pending_base_repair',
+        timestamp: '2024-01-15 10:30',
+        note: '检查完成，发现轻微划痕需补底',
+      },
+      {
+        id: 'SH-106-3',
+        fromStatus: 'pending_base_repair',
+        toStatus: 'pending_wax',
+        timestamp: '2024-01-15 14:00',
+        note: '补底完成，转打蜡工序',
+      },
+      {
+        id: 'SH-106-4',
+        fromStatus: 'pending_wax',
+        toStatus: 'pending_qa',
+        timestamp: '2024-01-16 09:00',
+        note: '打蜡完成，转质检',
+      },
+      {
+        id: 'SH-106-5',
+        fromStatus: 'pending_qa',
+        toStatus: 'delivered',
+        timestamp: '2024-01-16 15:00',
+        note: '质检通过，已交付客户',
       },
     ],
   },
@@ -195,8 +260,10 @@ export const initialWorkOrders: WorkOrder[] = [
     baseDamage: '底板划痕12cm',
     repairLocation: '板尾',
     customerPreference: '强咬雪',
-    status: 'pending',
+    status: 'pending_base_repair',
     createdAt: '2024-01-18',
+    estimatedDelivery: '2024-01-22',
+    riskWarning: '板尾边缘脱层，修复难度较高',
     damageMarks: [
       {
         id: 'DM-112-1',
@@ -219,6 +286,22 @@ export const initialWorkOrders: WorkOrder[] = [
         repairMethod: '边缘焊接',
       },
     ],
+    statusHistory: [
+      {
+        id: 'SH-112-1',
+        fromStatus: null,
+        toStatus: 'pending_inspection',
+        timestamp: '2024-01-18 11:00',
+        note: '工单创建',
+      },
+      {
+        id: 'SH-112-2',
+        fromStatus: 'pending_inspection',
+        toStatus: 'pending_base_repair',
+        timestamp: '2024-01-18 14:30',
+        note: '检查完成，底板划痕+边缘脱层需补底',
+      },
+    ],
   },
   {
     id: 'ORD-118',
@@ -231,9 +314,216 @@ export const initialWorkOrders: WorkOrder[] = [
     baseDamage: '无',
     repairLocation: '板头',
     customerPreference: '弱咬雪',
-    status: 'pending',
+    status: 'pending_wax',
     createdAt: '2024-01-20',
+    estimatedDelivery: '2024-01-21',
+    riskWarning: '',
     damageMarks: [],
+    statusHistory: [
+      {
+        id: 'SH-118-1',
+        fromStatus: null,
+        toStatus: 'pending_inspection',
+        timestamp: '2024-01-20 09:30',
+        note: '工单创建',
+      },
+      {
+        id: 'SH-118-2',
+        fromStatus: 'pending_inspection',
+        toStatus: 'pending_wax',
+        timestamp: '2024-01-20 11:00',
+        note: '检查完成，底板无损伤，直接打蜡',
+      },
+    ],
+  },
+  {
+    id: 'ORD-125',
+    brand: 'Ride',
+    length: '152',
+    boardType: '公园板',
+    sideEdgeAngle: '90°',
+    baseEdgeAngle: '1°',
+    waxType: '高温蜡',
+    baseDamage: '板底凹坑',
+    repairLocation: '板头',
+    customerPreference: '中等咬雪',
+    status: 'pending_inspection',
+    createdAt: '2024-01-20',
+    estimatedDelivery: '2024-01-23',
+    riskWarning: '',
+    damageMarks: [
+      {
+        id: 'DM-125-1',
+        type: 'dent',
+        x: 25,
+        y: 30,
+        locationNote: '板头中央',
+        length: '2',
+        severity: 'mild',
+        repairMethod: '环氧树脂修补',
+      },
+    ],
+    statusHistory: [
+      {
+        id: 'SH-125-1',
+        fromStatus: null,
+        toStatus: 'pending_inspection',
+        timestamp: '2024-01-20 16:00',
+        note: '工单创建，待检查',
+      },
+    ],
+  },
+  {
+    id: 'ORD-131',
+    brand: 'Capita',
+    length: '155',
+    boardType: '公园板',
+    sideEdgeAngle: '89°',
+    baseEdgeAngle: '0.5°',
+    waxType: '无氟蜡',
+    baseDamage: '板尾烧伤',
+    repairLocation: '板尾',
+    customerPreference: '弱咬雪',
+    status: 'pending_qa',
+    createdAt: '2024-01-17',
+    estimatedDelivery: '2024-01-21',
+    riskWarning: '烧伤区域较大，需重点检查修复质量',
+    damageMarks: [
+      {
+        id: 'DM-131-1',
+        type: 'burn',
+        x: 72,
+        y: 85,
+        locationNote: '板尾左侧',
+        length: '4',
+        severity: 'severe',
+        repairMethod: '整块更换',
+      },
+    ],
+    statusHistory: [
+      {
+        id: 'SH-131-1',
+        fromStatus: null,
+        toStatus: 'pending_inspection',
+        timestamp: '2024-01-17 10:00',
+        note: '工单创建',
+      },
+      {
+        id: 'SH-131-2',
+        fromStatus: 'pending_inspection',
+        toStatus: 'pending_base_repair',
+        timestamp: '2024-01-17 12:00',
+        note: '检查完成，板尾严重烧伤需补底',
+      },
+      {
+        id: 'SH-131-3',
+        fromStatus: 'pending_base_repair',
+        toStatus: 'pending_wax',
+        timestamp: '2024-01-19 09:00',
+        note: '补底完成，转打蜡工序',
+      },
+      {
+        id: 'SH-131-4',
+        fromStatus: 'pending_wax',
+        toStatus: 'pending_qa',
+        timestamp: '2024-01-20 14:00',
+        note: '打蜡完成，转质检',
+      },
+    ],
+  },
+  {
+    id: 'ORD-142',
+    brand: 'K2',
+    length: '160',
+    boardType: '全地域',
+    sideEdgeAngle: '88.5°',
+    baseEdgeAngle: '1°',
+    waxType: '中温蜡',
+    baseDamage: '多处划痕',
+    repairLocation: '全板',
+    customerPreference: '中等咬雪',
+    status: 'pending_inspection',
+    createdAt: '2024-01-20',
+    estimatedDelivery: '2024-01-24',
+    riskWarning: '',
+    damageMarks: [
+      {
+        id: 'DM-142-1',
+        type: 'scratch',
+        x: 35,
+        y: 40,
+        locationNote: '板腰左侧',
+        length: '5',
+        severity: 'mild',
+        repairMethod: '底座打磨',
+      },
+      {
+        id: 'DM-142-2',
+        type: 'scratch',
+        x: 55,
+        y: 60,
+        locationNote: '板腰右侧',
+        length: '8',
+        severity: 'moderate',
+        repairMethod: 'P-Tex填充',
+      },
+    ],
+    statusHistory: [
+      {
+        id: 'SH-142-1',
+        fromStatus: null,
+        toStatus: 'pending_inspection',
+        timestamp: '2024-01-20 14:30',
+        note: '工单创建，待检查',
+      },
+    ],
+  },
+  {
+    id: 'ORD-156',
+    brand: 'Never Summer',
+    length: '154',
+    boardType: '全地域',
+    sideEdgeAngle: '88°',
+    baseEdgeAngle: '1°',
+    waxType: '低温蜡',
+    baseDamage: '无',
+    repairLocation: '',
+    customerPreference: '中等咬雪',
+    status: 'delivered',
+    createdAt: '2024-01-12',
+    estimatedDelivery: '2024-01-14',
+    riskWarning: '',
+    damageMarks: [],
+    statusHistory: [
+      {
+        id: 'SH-156-1',
+        fromStatus: null,
+        toStatus: 'pending_inspection',
+        timestamp: '2024-01-12 09:00',
+        note: '工单创建',
+      },
+      {
+        id: 'SH-156-2',
+        fromStatus: 'pending_inspection',
+        toStatus: 'pending_wax',
+        timestamp: '2024-01-12 10:30',
+        note: '检查完成，底板无损伤',
+      },
+      {
+        id: 'SH-156-3',
+        fromStatus: 'pending_wax',
+        toStatus: 'pending_qa',
+        timestamp: '2024-01-13 09:00',
+        note: '打蜡完成',
+      },
+      {
+        id: 'SH-156-4',
+        fromStatus: 'pending_qa',
+        toStatus: 'delivered',
+        timestamp: '2024-01-13 16:00',
+        note: '质检通过，已交付',
+      },
+    ],
   },
 ];
 

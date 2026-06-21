@@ -4,6 +4,8 @@ import WorkOrderForm from './WorkOrderForm';
 import WorkOrderList from './WorkOrderList';
 import EdgeAngleTable from './EdgeAngleTable';
 import CustomerHistoryPanel from './CustomerHistoryPanel';
+import KanbanBoard from './KanbanBoard';
+import StatusHistoryModal from './StatusHistoryModal';
 import {
   WorkOrder,
   WorkOrderFormData,
@@ -12,6 +14,9 @@ import {
   initialEdgeAngleParams,
   CustomerHistoryRecord,
   initialCustomerHistory,
+  WorkOrderStatus,
+  StatusHistoryRecord,
+  STATUS_CONFIG,
 } from './types';
 
 const project = {
@@ -29,12 +34,13 @@ const project = {
 function App() {
   const [orders, setOrders] = useState<WorkOrder[]>(initialWorkOrders);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | WorkOrderStatus>('all');
   const [selectedEdgeParam, setSelectedEdgeParam] = useState<EdgeAngleParam | null>(null);
   const [edgeParams] = useState<EdgeAngleParam[]>(initialEdgeAngleParams);
   const [customerHistory] = useState<CustomerHistoryRecord[]>(initialCustomerHistory);
   const [selectedHistoryRecord, setSelectedHistoryRecord] = useState<CustomerHistoryRecord | null>(null);
   const [editingOrder, setEditingOrder] = useState<WorkOrder | null>(null);
+  const [selectedHistoryOrder, setSelectedHistoryOrder] = useState<WorkOrder | null>(null);
 
   const getNextOrderId = () => {
     let maxNum = 0;
@@ -59,11 +65,31 @@ function App() {
       );
       setEditingOrder(null);
     } else {
+      const today = new Date();
+      const deliveryDate = new Date(today);
+      deliveryDate.setDate(today.getDate() + 3);
+      const estimatedDelivery = deliveryDate.toISOString().split('T')[0];
+
+      const now = new Date();
+      const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
       const newOrder: WorkOrder = {
         ...formData,
         id: getNextOrderId(),
-        status: 'pending',
-        createdAt: new Date().toISOString().split('T')[0],
+        status: 'pending_inspection',
+        createdAt: today.toISOString().split('T')[0],
+        estimatedDelivery,
+        riskWarning: '',
+        damageMarks: formData.damageMarks || [],
+        statusHistory: [
+          {
+            id: `SH-${getNextOrderId()}-${Date.now()}`,
+            fromStatus: null,
+            toStatus: 'pending_inspection',
+            timestamp,
+            note: '工单创建',
+          },
+        ],
       };
       setOrders([newOrder, ...orders]);
     }
@@ -77,12 +103,62 @@ function App() {
 
   const handleToggleStatus = (orderId: string) => {
     setOrders((prev) =>
+      prev.map((order) => {
+        if (order.id !== orderId) return order;
+
+        const statusOrder: WorkOrderStatus[] = [
+          'pending_inspection',
+          'pending_wax',
+          'pending_base_repair',
+          'pending_qa',
+          'delivered',
+        ];
+        const currentIndex = statusOrder.indexOf(order.status);
+        const nextIndex = (currentIndex + 1) % statusOrder.length;
+        const nextStatus = statusOrder[nextIndex];
+
+        const now = new Date();
+        const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+        const targetLabel = STATUS_CONFIG.find((s) => s.value === nextStatus)?.label ?? nextStatus;
+
+        const newHistoryRecord: StatusHistoryRecord = {
+          id: `SH-${order.id}-${Date.now()}`,
+          fromStatus: order.status,
+          toStatus: nextStatus,
+          timestamp,
+          note: `移至${targetLabel}`,
+        };
+
+        return {
+          ...order,
+          status: nextStatus,
+          statusHistory: [...order.statusHistory, newHistoryRecord],
+        };
+      })
+    );
+  };
+
+  const handleMoveOrder = (orderId: string, newStatus: WorkOrderStatus, historyRecord: StatusHistoryRecord) => {
+    setOrders((prev) =>
       prev.map((order) =>
         order.id === orderId
-          ? { ...order, status: order.status === 'pending' ? 'completed' : 'pending' }
+          ? {
+              ...order,
+              status: newStatus,
+              statusHistory: [...order.statusHistory, historyRecord],
+            }
           : order
       )
     );
+  };
+
+  const handleViewHistory = (order: WorkOrder) => {
+    setSelectedHistoryOrder(order);
+  };
+
+  const handleCloseHistoryModal = () => {
+    setSelectedHistoryOrder(null);
   };
 
   const handleCancelEdit = () => {
@@ -97,8 +173,12 @@ function App() {
     filteredOrders = filteredOrders.filter((o) => o.status === statusFilter);
   }
 
-  const pendingCount = orders.filter((o) => o.status === 'pending').length;
-  const completedCount = orders.filter((o) => o.status === 'completed').length;
+  const inspectionCount = orders.filter((o) => o.status === 'pending_inspection').length;
+  const waxCount = orders.filter((o) => o.status === 'pending_wax').length;
+  const repairCount = orders.filter((o) => o.status === 'pending_base_repair').length;
+  const qaCount = orders.filter((o) => o.status === 'pending_qa').length;
+  const deliveredCount = orders.filter((o) => o.status === 'delivered').length;
+  const inProgressCount = orders.length - deliveredCount;
 
   const avgSideEdge = orders.length
     ? (
@@ -109,9 +189,18 @@ function App() {
       ).toFixed(1)
     : 0;
 
-  const repairCount = orders.filter(
+  const baseRepairCount = orders.filter(
     (o) => (o.baseDamage && o.baseDamage !== '无') || (o.damageMarks && o.damageMarks.length > 0)
   ).length;
+
+  const overdueCount = orders.filter((o) => {
+    if (o.status === 'delivered') return false;
+    const today = new Date();
+    const delivery = new Date(o.estimatedDelivery);
+    today.setHours(0, 0, 0, 0);
+    delivery.setHours(0, 0, 0, 0);
+    return delivery < today;
+  }).length;
 
   const handleSelectEdgeParam = (param: EdgeAngleParam) => {
     setSelectedEdgeParam(param);
@@ -133,20 +222,20 @@ function App() {
 
       <section className="metrics">
         <article>
-          <small>待维护</small>
-          <strong>{pendingCount}</strong>
+          <small>进行中</small>
+          <strong>{inProgressCount}</strong>
         </article>
         <article>
-          <small>完工工单</small>
-          <strong>{completedCount}</strong>
+          <small>待质检</small>
+          <strong>{qaCount}</strong>
         </article>
         <article>
-          <small>平均侧刃角</small>
-          <strong>{avgSideEdge}°</strong>
+          <small>已交付</small>
+          <strong>{deliveredCount}</strong>
         </article>
         <article>
-          <small>底板修补</small>
-          <strong>{repairCount}</strong>
+          <small>逾期工单</small>
+          <strong style={{ color: overdueCount > 0 ? 'var(--error)' : 'inherit' }}>{overdueCount}</strong>
         </article>
       </section>
 
@@ -179,18 +268,15 @@ function App() {
             >
               全部
             </button>
-            <button
-              className={statusFilter === 'pending' ? 'active' : ''}
-              onClick={() => setStatusFilter('pending')}
-            >
-              待维护
-            </button>
-            <button
-              className={statusFilter === 'completed' ? 'active' : ''}
-              onClick={() => setStatusFilter('completed')}
-            >
-              已完工
-            </button>
+            {STATUS_CONFIG.map((status) => (
+              <button
+                key={status.value}
+                className={statusFilter === status.value ? 'active' : ''}
+                onClick={() => setStatusFilter(status.value)}
+              >
+                {status.label}
+              </button>
+            ))}
           </div>
         </aside>
 
@@ -211,11 +297,22 @@ function App() {
 
       <EdgeAngleTable params={edgeParams} onSelectParam={handleSelectEdgeParam} />
 
+      <KanbanBoard
+        orders={orders}
+        onMoveOrder={handleMoveOrder}
+        onViewHistory={handleViewHistory}
+      />
+
       <WorkOrderList
         orders={filteredOrders}
         onEditOrder={handleEditOrder}
         onToggleStatus={handleToggleStatus}
         editingOrderId={editingOrder?.id ?? null}
+      />
+
+      <StatusHistoryModal
+        order={selectedHistoryOrder}
+        onClose={handleCloseHistoryModal}
       />
     </main>
   );

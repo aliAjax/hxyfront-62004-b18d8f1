@@ -1,4 +1,4 @@
-import { WorkOrder, DAMAGE_TYPES, SEVERITY_LEVELS } from './types';
+import { WorkOrder, DAMAGE_TYPES, SEVERITY_LEVELS, STATUS_CONFIG } from './types';
 
 interface WorkOrderListProps {
   orders: WorkOrder[];
@@ -7,9 +7,12 @@ interface WorkOrderListProps {
   editingOrderId: string | null;
 }
 
-const statusMap = {
-  pending: { label: '待维护', color: 'var(--accent)' },
-  completed: { label: '已完工', color: 'var(--secondary)' },
+const getStatusInfo = (status: string) => {
+  const config = STATUS_CONFIG.find((s) => s.value === status);
+  return {
+    label: config?.label ?? status,
+    color: config?.color ?? '#64748b',
+  };
 };
 
 const getDamageTypeLabel = (type: string) =>
@@ -30,7 +33,7 @@ export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, edi
       </div>
       <div className="records">
         {orders.map((order, index) => {
-          const status = statusMap[order.status];
+          const status = getStatusInfo(order.status);
           const isEditing = order.id === editingOrderId;
           const hasMarks = order.damageMarks && order.damageMarks.length > 0;
 
@@ -105,10 +108,10 @@ export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, edi
                     {isEditing ? '编辑中...' : '编辑工单'}
                   </button>
                   <button
-                    className={`small-btn ${order.status === 'completed' ? 'secondary' : 'primary'}`}
+                    className={`small-btn ${order.status === 'delivered' ? 'secondary' : 'primary'}`}
                     onClick={() => onToggleStatus(order.id)}
                   >
-                    {order.status === 'pending' ? '标记完工' : '恢复待维护'}
+                    {order.status === 'delivered' ? '重新开始' : '推进状态'}
                   </button>
                 </div>
               </div>
