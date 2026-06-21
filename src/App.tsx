@@ -174,6 +174,10 @@ function App() {
 
     if (nextStatus === 'delivered') {
       syncOrderToCustomerHistory(updatedOrder);
+      const existingAssignment = assignments.find((a) => a.workOrderId === orderId);
+      if (existingAssignment) {
+        handleRemoveAssignment(existingAssignment.id);
+      }
     }
   };
 
@@ -208,6 +212,10 @@ function App() {
 
     if (newStatus === 'delivered') {
       syncOrderToCustomerHistory(updatedOrder);
+      const existingAssignment = assignments.find((a) => a.workOrderId === orderId);
+      if (existingAssignment) {
+        handleRemoveAssignment(existingAssignment.id);
+      }
     }
   };
 
@@ -333,6 +341,22 @@ function App() {
   };
 
   const handleReassignOrder = (assignmentId: string, newTechnicianId: string) => {
+    const assignment = assignments.find((a) => a.id === assignmentId);
+    const newTech = technicians.find((t) => t.id === newTechnicianId);
+    if (!assignment || !newTech) return;
+
+    const newTechCurrentLoad = assignments
+      .filter((a) => a.technicianId === newTechnicianId)
+      .reduce((sum, a) => sum + a.estimatedMinutes, 0);
+    const effectiveCapacity = newTech.dailyCapacityMinutes * SKILL_LEVEL_CONFIG[newTech.skillLevel].capacityMultiplier;
+    const remainingCapacity = effectiveCapacity - newTechCurrentLoad;
+    const willOverload = remainingCapacity < assignment.estimatedMinutes;
+
+    if (willOverload) {
+      const confirmMsg = `⚠️ 转派此工单将导致 ${newTech.name} 超负荷！\n\n该工单预计耗时：${Math.round(assignment.estimatedMinutes)}分钟\n技师剩余容量：${Math.round(Math.max(0, remainingCapacity))}分钟\n超出容量：${Math.round(assignment.estimatedMinutes - Math.max(0, remainingCapacity))}分钟\n\n是否仍要转派？`;
+      if (!window.confirm(confirmMsg)) return;
+    }
+
     setAssignments((prev) => {
       const target = prev.find((a) => a.id === assignmentId);
       if (!target) return prev;
@@ -454,6 +478,26 @@ function App() {
 
       <section className="metrics">
         <article>
+          <small>待检查</small>
+          <strong>{inspectionCount}</strong>
+        </article>
+        <article>
+          <small>待打蜡</small>
+          <strong>{waxCount}</strong>
+        </article>
+        <article>
+          <small>待补底</small>
+          <strong>{repairCount}</strong>
+        </article>
+        <article>
+          <small>待质检</small>
+          <strong>{qaCount}</strong>
+        </article>
+        <article>
+          <small>已交付</small>
+          <strong style={{ color: 'var(--secondary)' }}>{deliveredCount}</strong>
+        </article>
+        <article>
           <small>进行中</small>
           <strong>{inProgressCount}</strong>
         </article>
@@ -478,6 +522,10 @@ function App() {
         <article>
           <small>逾期工单</small>
           <strong style={{ color: overdueCount > 0 ? 'var(--error)' : 'inherit' }}>{overdueCount}</strong>
+        </article>
+        <article>
+          <small>需补底</small>
+          <strong>{baseRepairCount}</strong>
         </article>
       </section>
 

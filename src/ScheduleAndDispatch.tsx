@@ -83,16 +83,37 @@ export default function ScheduleAndDispatch({
 
   const technicianWorkload = useMemo(() => {
     return technicians.map((tech) => {
-      const techAssignments = assignments.filter((a) => a.technicianId === tech.id);
-      const totalMinutes = techAssignments.reduce((sum, a) => sum + a.estimatedMinutes, 0);
+      const techAssignments = assignments
+        .filter((a) => a.technicianId === tech.id)
+        .sort((a, b) => b.priority - a.priority || a.queuePosition - b.queuePosition);
+
       const effectiveCapacity = tech.dailyCapacityMinutes * SKILL_LEVEL_CONFIG[tech.skillLevel].capacityMultiplier;
+
+      let cumulativeMinutes = 0;
+      const assignmentsWithCapacityInfo = techAssignments.map((a) => {
+        cumulativeMinutes += a.estimatedMinutes;
+        const isWithinCapacity = cumulativeMinutes <= effectiveCapacity;
+        const capacityOverflow = Math.max(0, cumulativeMinutes - effectiveCapacity);
+        return {
+          ...a,
+          cumulativeMinutes,
+          isWithinCapacity,
+          capacityOverflow,
+        };
+      });
+
+      const totalMinutes = techAssignments.reduce((sum, a) => sum + a.estimatedMinutes, 0);
       const loadPercent = Math.min(100, Math.round((totalMinutes / effectiveCapacity) * 100));
       const isOverloaded = totalMinutes > effectiveCapacity;
+      const remainingCapacity = Math.max(0, effectiveCapacity - totalMinutes);
+
       return {
         technician: tech,
         assignments: techAssignments,
+        assignmentsWithCapacityInfo,
         totalMinutes,
         effectiveCapacity,
+        remainingCapacity,
         loadPercent,
         isOverloaded,
       };
@@ -100,22 +121,66 @@ export default function ScheduleAndDispatch({
   }, [technicians, assignments]);
 
   const queueOrders = useMemo(() => {
-    return [...assignments]
-      .map((a) => {
-        const order = workOrders.find((o) => o.id === a.workOrderId);
-        const tech = technicians.find((t) => t.id === a.technicianId);
-        return { assignment: a, order, tech };
-      })
-      .filter((item): item is { assignment: WorkOrderAssignment; order: WorkOrder; tech: Technician } => !!item.order && !!item.tech)
+    const capacityMap = new Map<string, { cumulative: number; capacity: number }>();
+    technicians.forEach((tech) => {
+      const effectiveCapacity = tech.dailyCapacityMinutes * SKILL_LEVEL_CONFIG[tech.skillLevel].capacityMultiplier;
+      capacityMap.set(tech.id, { cumulative: 0, capacity: effectiveCapacity });
+    });
+
+    const sortedByPriority = [...assignments]
       .sort((a, b) => {
-        if (a.assignment.priority !== b.assignment.priority) return b.assignment.priority - a.assignment.priority;
-        return new Date(a.assignment.assignedAt).getTime() - new Date(b.assignment.assignedAt).getTime();
+        if (a.priority !== b.priority) return b.priority - a.priority;
+        return new Date(a.assignedAt).getTime() - new Date(b.assignedAt).getTime();
       });
+
+    const assignmentsWithCapacity = sortedByPriority.map((a) => {
+      const order = workOrders.find((o) => o.id === a.workOrderId);
+      const tech = technicians.find((t) => t.id === a.technicianId);
+      if (!order || !tech) return null;
+
+      const capInfo = capacityMap.get(tech.id)!;
+      capInfo.cumulative += a.estimatedMinutes;
+      const isWithinCapacity = capInfo.cumulative <= capInfo.capacity;
+      const techRemaining = capInfo.capacity - (capInfo.cumulative - a.estimatedMinutes);
+      const wouldCauseOverload = techRemaining < a.estimatedMinutes;
+
+      return {
+        assignment: a,
+        order,
+        tech,
+        isWithinCapacity,
+        wouldCauseOverload,
+        cumulativeMinutes: capInfo.cumulative,
+      };
+    }).filter((item): item is NonNullable<typeof item> => item !== null);
+
+    return assignmentsWithCapacity.sort((a, b) => {
+      if (a.isWithinCapacity !== b.isWithinCapacity) {
+        return a.isWithinCapacity ? -1 : 1;
+      }
+      if (a.assignment.priority !== b.assignment.priority) {
+        return b.assignment.priority - a.assignment.priority;
+      }
+      return new Date(a.assignment.assignedAt).getTime() - new Date(b.assignment.assignedAt).getTime();
+    });
   }, [assignments, workOrders, technicians]);
 
   const handleAssignOrder = (orderId: string, technicianId: string) => {
     const order = workOrders.find((o) => o.id === orderId);
-    if (!order) return;
+    const tech = technicians.find((t) => t.id === technicianId);
+    if (!order || !tech) return;
+
+    const estMinutes = calculateEstimatedMinutes(order);
+    const techWorkload = technicianWorkload.find((w) => w.technician.id === technicianId);
+    const effectiveCapacity = tech.dailyCapacityMinutes * SKILL_LEVEL_CONFIG[tech.skillLevel].capacityMultiplier;
+    const currentLoad = techWorkload?.totalMinutes ?? 0;
+    const remainingCapacity = effectiveCapacity - currentLoad;
+    const willOverload = remainingCapacity < estMinutes;
+
+    if (willOverload) {
+      const confirmMsg = `⚠️ 分配此工单将导致 ${tech.name} 超负荷！\n\n该工单预计耗时：${formatMinutes(estMinutes)}\n技师剩余容量：${formatMinutes(Math.max(0, Math.round(remainingCapacity)))}\n超出容量：${formatMinutes(estMinutes - Math.max(0, remainingCapacity))}\n\n是否仍要分配？`;
+      if (!window.confirm(confirmMsg)) return;
+    }
 
     const now = new Date();
     const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -130,7 +195,7 @@ export default function ScheduleAndDispatch({
       workOrderId: orderId,
       technicianId,
       assignedAt: timestamp,
-      estimatedMinutes: calculateEstimatedMinutes(order),
+      estimatedMinutes: estMinutes,
       complexityScore: calculateComplexityScore(order),
       priority: assignmentPriority,
       queuePosition: maxQueuePos + 1,
@@ -320,15 +385,19 @@ export default function ScheduleAndDispatch({
                       value=""
                       onChange={(e) => e.target.value && handleAssignOrder(order.id, e.target.value)}
                     >
-                      <option value="">选择技师...</option>
+                      <option value="">选择技师（按剩余容量排序）...</option>
                       {technicianWorkload
                         .filter((t) => t.technician.status === 'on_duty')
-                        .sort((a, b) => a.loadPercent - b.loadPercent)
-                        .map(({ technician, loadPercent, isOverloaded }) => (
-                          <option key={technician.id} value={technician.id}>
-                            {technician.name} - {loadPercent}%{isOverloaded ? ' (超负荷)' : ''}
-                          </option>
-                        ))}
+                        .sort((a, b) => b.remainingCapacity - a.remainingCapacity)
+                        .map(({ technician, loadPercent, remainingCapacity, isOverloaded }) => {
+                          const orderEstMinutes = calculateEstimatedMinutes(order);
+                          const canFit = remainingCapacity >= orderEstMinutes;
+                          return (
+                            <option key={technician.id} value={technician.id}>
+                              {technician.name} - 剩{formatMinutes(Math.round(remainingCapacity))} {canFit ? '✓' : '⚠️'} ({loadPercent}%)
+                            </option>
+                          );
+                        })}
                     </select>
                     <div className="assign-options">
                       <label>
@@ -406,55 +475,60 @@ export default function ScheduleAndDispatch({
                     <span>暂无任务</span>
                   </div>
                 ) : (
-                  techAssignments
-                    .sort((a, b) => b.priority - a.priority || a.queuePosition - b.queuePosition)
-                    .map((assignment, idx) => {
-                      const order = getOrderById(assignment.workOrderId);
-                      if (!order) return null;
-                      return (
-                        <div key={assignment.id} className="board-task-card">
-                          <div className="task-queue-position">#{idx + 1}</div>
-                          {assignment.priority >= 3 && <div className="priority-flag high">紧急</div>}
-                          {assignment.priority === 2 && <div className="priority-flag mid">较高</div>}
-                          <WorkOrderMiniCard order={order} compact />
-                          <div className="task-meta">
-                            <span>⏱ {formatMinutes(assignment.estimatedMinutes)}</span>
-                            <span>📊 {getComplexityLabel(assignment.complexityScore).label}</span>
-                          </div>
-                          {assignment.note && <div className="task-note">📝 {assignment.note}</div>}
-                          <div className="task-actions">
-                            {reassigningAssignmentId === assignment.id ? (
-                              <div className="reassign-dropdown">
-                                <select
-                                  className="tech-select small"
-                                  value=""
-                                  onChange={(e) => e.target.value && handleReassign(assignment.id, e.target.value)}
-                                >
-                                  <option value="">转派给...</option>
-                                  {technicians
-                                    .filter((t) => t.id !== technician.id && t.status === 'on_duty')
-                                    .map((t) => (
-                                      <option key={t.id} value={t.id}>{t.name}</option>
-                                    ))}
-                                </select>
-                                <button className="small-btn danger" onClick={() => setReassigningAssignmentId(null)}>
-                                  取消
-                                </button>
-                              </div>
-                            ) : (
-                              <>
-                                <button className="small-btn" onClick={() => setReassigningAssignmentId(assignment.id)}>
-                                  转派
-                                </button>
-                                <button className="small-btn danger" onClick={() => onRemoveAssignment(assignment.id)}>
-                                  取消分配
-                                </button>
-                              </>
-                            )}
-                          </div>
+                  assignmentsWithCapacityInfo.map((assignment, idx) => {
+                    const order = getOrderById(assignment.workOrderId);
+                    if (!order) return null;
+                    return (
+                      <div key={assignment.id} className={`board-task-card ${!assignment.isWithinCapacity ? 'over-capacity' : ''}`}>
+                        <div className="task-queue-position">#{idx + 1}</div>
+                        {assignment.priority >= 3 && <div className="priority-flag high">紧急</div>}
+                        {assignment.priority === 2 && <div className="priority-flag mid">较高</div>}
+                        {!assignment.isWithinCapacity && <div className="priority-flag overload">超出容量</div>}
+                        <WorkOrderMiniCard order={order} compact />
+                        <div className="task-meta">
+                          <span>⏱ {formatMinutes(assignment.estimatedMinutes)}</span>
+                          <span>📊 {getComplexityLabel(assignment.complexityScore).label}</span>
+                          <span>累计 {formatMinutes(assignment.cumulativeMinutes)}</span>
                         </div>
-                      );
-                    })
+                        {assignment.note && <div className="task-note">📝 {assignment.note}</div>}
+                        {!assignment.isWithinCapacity && (
+                          <div className="capacity-warning">
+                            ⚠️ 超出日容量 {formatMinutes(assignment.capacityOverflow)}，建议转派
+                          </div>
+                        )}
+                        <div className="task-actions">
+                          {reassigningAssignmentId === assignment.id ? (
+                            <div className="reassign-dropdown">
+                              <select
+                                className="tech-select small"
+                                value=""
+                                onChange={(e) => e.target.value && handleReassign(assignment.id, e.target.value)}
+                              >
+                                <option value="">转派给...</option>
+                                {technicians
+                                  .filter((t) => t.id !== technician.id && t.status === 'on_duty')
+                                  .map((t) => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                  ))}
+                              </select>
+                              <button className="small-btn danger" onClick={() => setReassigningAssignmentId(null)}>
+                                取消
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <button className="small-btn" onClick={() => setReassigningAssignmentId(assignment.id)}>
+                                转派
+                              </button>
+                              <button className="small-btn danger" onClick={() => onRemoveAssignment(assignment.id)}>
+                                取消分配
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -510,6 +584,23 @@ export default function ScheduleAndDispatch({
           </div>
         )}
 
+        <div className="detail-capacity-info">
+          <div className="capacity-stat">
+            <span className="capacity-label">有效日容量</span>
+            <span className="capacity-value">{formatMinutes(Math.round(effectiveCapacity))}</span>
+          </div>
+          <div className="capacity-stat">
+            <span className="capacity-label">已安排</span>
+            <span className="capacity-value">{formatMinutes(totalMinutes)}</span>
+          </div>
+          <div className="capacity-stat">
+            <span className="capacity-label">剩余容量</span>
+            <span className={`capacity-value ${remainingCapacity < 60 ? 'warning' : ''}`}>
+              {formatMinutes(Math.round(remainingCapacity))}
+            </span>
+          </div>
+        </div>
+
         <div className="detail-task-list">
           <h4>任务队列 ({techAssignments.length})</h4>
           {techAssignments.length === 0 ? (
@@ -517,67 +608,72 @@ export default function ScheduleAndDispatch({
               <div className="empty-title">暂无任务安排</div>
             </div>
           ) : (
-            techAssignments
-              .sort((a, b) => b.priority - a.priority || a.queuePosition - b.queuePosition)
-              .map((assignment, idx) => {
-                const order = getOrderById(assignment.workOrderId);
-                if (!order) return null;
-                const statusConfig = STATUS_CONFIG.find((s) => s.value === order.status);
-                return (
-                  <div key={assignment.id} className="detail-task-row">
-                    <div className="task-pos-circle">{idx + 1}</div>
-                    <div className="task-row-content">
-                      <div className="task-row-header">
-                        <strong>{order.id}</strong>
-                        <span className="status-tag small" style={{ background: statusConfig?.color + '20', color: statusConfig?.color }}>
-                          {statusConfig?.label}
-                        </span>
-                        {assignment.priority >= 3 && <span className="priority-tag high">紧急</span>}
-                        {assignment.priority === 2 && <span className="priority-tag mid">较高</span>}
-                      </div>
-                      <div className="task-row-desc">
-                        {order.brand} {order.length}cm {order.boardType}
-                      </div>
-                      <div className="task-row-meta">
-                        <span>⏱ 预计 {formatMinutes(assignment.estimatedMinutes)}</span>
-                        <span>📊 复杂度 {getComplexityLabel(assignment.complexityScore).label}</span>
-                        <span>🕐 分配于 {assignment.assignedAt}</span>
-                      </div>
-                      {assignment.note && <div className="task-row-note">📝 {assignment.note}</div>}
+            assignmentsWithCapacityInfo.map((assignment, idx) => {
+              const order = getOrderById(assignment.workOrderId);
+              if (!order) return null;
+              const statusConfig = STATUS_CONFIG.find((s) => s.value === order.status);
+              return (
+                <div key={assignment.id} className={`detail-task-row ${!assignment.isWithinCapacity ? 'over-capacity' : ''}`}>
+                  <div className={`task-pos-circle ${!assignment.isWithinCapacity ? 'overload' : ''}`}>{idx + 1}</div>
+                  <div className="task-row-content">
+                    <div className="task-row-header">
+                      <strong>{order.id}</strong>
+                      <span className="status-tag small" style={{ background: statusConfig?.color + '20', color: statusConfig?.color }}>
+                        {statusConfig?.label}
+                      </span>
+                      {assignment.priority >= 3 && <span className="priority-tag high">紧急</span>}
+                      {assignment.priority === 2 && <span className="priority-tag mid">较高</span>}
+                      {!assignment.isWithinCapacity && <span className="priority-tag overload">超出容量</span>}
                     </div>
-                    <div className="task-row-actions">
-                      {reassigningAssignmentId === assignment.id ? (
-                        <div className="reassign-dropdown">
-                          <select
-                            className="tech-select small"
-                            value=""
-                            onChange={(e) => e.target.value && handleReassign(assignment.id, e.target.value)}
-                          >
-                            <option value="">转派给...</option>
-                            {technicians
-                              .filter((t) => t.id !== technician.id && t.status === 'on_duty')
-                              .map((t) => (
-                                <option key={t.id} value={t.id}>{t.name}</option>
-                              ))}
-                          </select>
-                          <button className="small-btn danger" onClick={() => setReassigningAssignmentId(null)}>
-                            取消
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <button className="small-btn" onClick={() => setReassigningAssignmentId(assignment.id)}>
-                            转派
-                          </button>
-                          <button className="small-btn danger" onClick={() => onRemoveAssignment(assignment.id)}>
-                            取消
-                          </button>
-                        </>
-                      )}
+                    <div className="task-row-desc">
+                      {order.brand} {order.length}cm {order.boardType}
                     </div>
+                    <div className="task-row-meta">
+                      <span>⏱ 预计 {formatMinutes(assignment.estimatedMinutes)}</span>
+                      <span>📊 复杂度 {getComplexityLabel(assignment.complexityScore).label}</span>
+                      <span>📈 累计 {formatMinutes(assignment.cumulativeMinutes)}</span>
+                      <span>🕐 分配于 {assignment.assignedAt}</span>
+                    </div>
+                    {assignment.note && <div className="task-row-note">📝 {assignment.note}</div>}
+                    {!assignment.isWithinCapacity && (
+                      <div className="capacity-warning">
+                        ⚠️ 此任务超出日容量 {formatMinutes(assignment.capacityOverflow)}，建议转派
+                      </div>
+                    )}
                   </div>
-                );
-              })
+                  <div className="task-row-actions">
+                    {reassigningAssignmentId === assignment.id ? (
+                      <div className="reassign-dropdown">
+                        <select
+                          className="tech-select small"
+                          value=""
+                          onChange={(e) => e.target.value && handleReassign(assignment.id, e.target.value)}
+                        >
+                          <option value="">转派给...</option>
+                          {technicians
+                            .filter((t) => t.id !== technician.id && t.status === 'on_duty')
+                            .map((t) => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                        </select>
+                        <button className="small-btn danger" onClick={() => setReassigningAssignmentId(null)}>
+                          取消
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <button className="small-btn" onClick={() => setReassigningAssignmentId(assignment.id)}>
+                          转派
+                        </button>
+                        <button className="small-btn danger" onClick={() => onRemoveAssignment(assignment.id)}>
+                          取消
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
       </div>
@@ -587,7 +683,7 @@ export default function ScheduleAndDispatch({
   const QueueView = () => (
     <div className="queue-view">
       <div className="queue-header-info">
-        <h4>全局排队顺序</h4>
+        <h4>全局排队顺序（容量感知）</h4>
         <span className="queue-count">共 {queueOrders.length} 个已分配任务</span>
       </div>
       {queueOrders.length === 0 ? (
@@ -598,17 +694,17 @@ export default function ScheduleAndDispatch({
         </div>
       ) : (
         <div className="queue-list">
-          {queueOrders.map(({ assignment, order, tech }, idx) => {
+          {queueOrders.map(({ assignment, order, tech, isWithinCapacity, cumulativeMinutes }, idx) => {
             const statusConfig = STATUS_CONFIG.find((s) => s.value === order.status);
             const complexity = getComplexityLabel(assignment.complexityScore);
             const overdue = getOverdueStatus(order);
             return (
               <div
                 key={assignment.id}
-                className={`queue-row ${overdue.isOverdue ? 'overdue' : ''} ${overdue.isUrgent ? 'urgent' : ''}`}
+                className={`queue-row ${overdue.isOverdue ? 'overdue' : ''} ${overdue.isUrgent ? 'urgent' : ''} ${!isWithinCapacity ? 'over-capacity' : ''}`}
               >
                 <div className="queue-position">
-                  <span className="queue-pos-num">{idx + 1}</span>
+                  <span className={`queue-pos-num ${!isWithinCapacity ? 'overload' : ''}`}>{idx + 1}</span>
                 </div>
                 <div className="queue-tech-col">
                   <div className="tech-avatar tiny" style={{ background: tech.avatarColor }}>
@@ -624,6 +720,7 @@ export default function ScheduleAndDispatch({
                     </span>
                     {assignment.priority >= 3 && <span className="priority-tag high">紧急</span>}
                     {assignment.priority === 2 && <span className="priority-tag mid">较高</span>}
+                    {!isWithinCapacity && <span className="priority-tag overload">超出容量</span>}
                     {overdue.isOverdue && <span className="priority-tag overdue">已逾期</span>}
                     {overdue.isUrgent && !overdue.isOverdue && <span className="priority-tag urgent">今日到期</span>}
                   </div>
@@ -637,6 +734,10 @@ export default function ScheduleAndDispatch({
                     <span className="meta-value">{formatMinutes(assignment.estimatedMinutes)}</span>
                   </div>
                   <div className="queue-meta-item">
+                    <span className="meta-label">累计耗时</span>
+                    <span className="meta-value">{formatMinutes(cumulativeMinutes)}</span>
+                  </div>
+                  <div className="queue-meta-item">
                     <span className="meta-label">复杂度</span>
                     <span className="meta-value" style={{ color: complexity.color, background: complexity.bgColor, padding: '2px 8px', borderRadius: 10 }}>
                       {complexity.label}
@@ -644,6 +745,11 @@ export default function ScheduleAndDispatch({
                   </div>
                 </div>
                 <div className="queue-actions">
+                  {!isWithinCapacity && (
+                    <div className="queue-capacity-hint">
+                      ⚠️ 超出容量
+                    </div>
+                  )}
                   {reassigningAssignmentId === assignment.id ? (
                     <div className="reassign-dropdown">
                       <select
@@ -654,9 +760,14 @@ export default function ScheduleAndDispatch({
                         <option value="">转派给...</option>
                         {technicians
                           .filter((t) => t.id !== tech.id && t.status === 'on_duty')
-                          .map((t) => (
-                            <option key={t.id} value={t.id}>{t.name}</option>
-                          ))}
+                          .map((t) => {
+                            const tw = technicianWorkload.find((w) => w.technician.id === t.id);
+                            return (
+                              <option key={t.id} value={t.id}>
+                                {t.name} (剩{formatMinutes(Math.round(tw?.remainingCapacity ?? 0))})
+                              </option>
+                            );
+                          })}
                       </select>
                       <button className="small-btn danger" onClick={() => setReassigningAssignmentId(null)}>
                         取消
