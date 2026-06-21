@@ -5,10 +5,12 @@ import {
   BOARD_TYPES,
   WAX_TYPES,
   REPAIR_LOCATIONS,
+  EdgeAngleParam,
 } from './types';
 
 interface WorkOrderFormProps {
   onSubmit: (data: WorkOrderFormData) => void;
+  selectedEdgeParam: EdgeAngleParam | null;
 }
 
 const DRAFT_KEY = 'work-order-draft';
@@ -34,7 +36,7 @@ const FIELD_LABELS: Record<keyof WorkOrderFormData, string> = {
   customerPreference: '客户偏好',
 };
 
-export default function WorkOrderForm({ onSubmit }: WorkOrderFormProps) {
+export default function WorkOrderForm({ onSubmit, selectedEdgeParam }: WorkOrderFormProps) {
   const [formData, setFormData] = useState<WorkOrderFormData>(emptyFormData);
   const [errors, setErrors] = useState<Partial<Record<keyof WorkOrderFormData, string>>>({});
   const [draftSaved, setDraftSaved] = useState(false);
@@ -49,6 +51,17 @@ export default function WorkOrderForm({ onSubmit }: WorkOrderFormProps) {
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (selectedEdgeParam) {
+      setFormData((prev) => ({
+        ...prev,
+        sideEdgeAngle: selectedEdgeParam.sideEdgeAngle,
+        baseEdgeAngle: selectedEdgeParam.baseEdgeAngle,
+        boardType: selectedEdgeParam.boardType,
+      }));
+    }
+  }, [selectedEdgeParam]);
 
   const handleChange = (field: keyof WorkOrderFormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));

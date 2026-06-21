@@ -2,7 +2,14 @@ import { useState } from 'react';
 import './styles.css';
 import WorkOrderForm from './WorkOrderForm';
 import WorkOrderList from './WorkOrderList';
-import { WorkOrder, WorkOrderFormData, initialWorkOrders } from './types';
+import EdgeAngleTable from './EdgeAngleTable';
+import {
+  WorkOrder,
+  WorkOrderFormData,
+  initialWorkOrders,
+  EdgeAngleParam,
+  initialEdgeAngleParams,
+} from './types';
 
 const project = {
   sourceNo: 6,
@@ -19,6 +26,8 @@ const project = {
 function App() {
   const [orders, setOrders] = useState<WorkOrder[]>(initialWorkOrders);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
+  const [selectedEdgeParam, setSelectedEdgeParam] = useState<EdgeAngleParam | null>(null);
+  const [edgeParams] = useState<EdgeAngleParam[]>(initialEdgeAngleParams);
 
   const getNextOrderId = () => {
     let maxNum = 0;
@@ -59,6 +68,10 @@ function App() {
     : 0;
 
   const repairCount = orders.filter((o) => o.baseDamage && o.baseDamage !== '无').length;
+
+  const handleSelectEdgeParam = (param: EdgeAngleParam) => {
+    setSelectedEdgeParam(param);
+  };
 
   return (
     <main className="app">
@@ -111,8 +124,10 @@ function App() {
           </div>
         </aside>
 
-        <WorkOrderForm onSubmit={handleSubmit} />
+        <WorkOrderForm onSubmit={handleSubmit} selectedEdgeParam={selectedEdgeParam} />
       </section>
+
+      <EdgeAngleTable params={edgeParams} onSelectParam={handleSelectEdgeParam} />
 
       <WorkOrderList orders={filteredOrders} />
     </main>
