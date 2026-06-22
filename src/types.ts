@@ -211,6 +211,32 @@ export interface PhaseTransitionResult {
   requiresRejectReason?: boolean;
 }
 
+export interface WorkOrderFilter {
+  boardType: string | null;
+  phase: WorkOrderPhase | 'all';
+  overdue: boolean | null;
+  hasTechnician: boolean | null;
+  hasAbnormalReturn: boolean | null;
+}
+
+export const EMPTY_FILTER: WorkOrderFilter = {
+  boardType: null,
+  phase: 'all',
+  overdue: null,
+  hasTechnician: null,
+  hasAbnormalReturn: null,
+};
+
+export const isFilterEmpty = (filter: WorkOrderFilter): boolean => {
+  return (
+    filter.boardType === null &&
+    filter.phase === 'all' &&
+    filter.overdue === null &&
+    filter.hasTechnician === null &&
+    filter.hasAbnormalReturn === null
+  );
+};
+
 export type WorkOrderStatusOld =
   | 'pending_inspection'
   | 'pending_wax'

@@ -30,6 +30,10 @@ import {
   emptyFormData,
   PHASE_ORDER,
   getPhaseConfig,
+  WorkOrderFilter,
+  EMPTY_FILTER,
+  isFilterEmpty,
+  BOARD_TYPES,
 } from './types';
 import QualityChecklistPanel from './QualityChecklistPanel';
 import {
@@ -70,8 +74,7 @@ function App() {
   const technicianActions = useTechnicianActions();
   const dataIO = useDataIO();
 
-  const [activeFilter, setActiveFilter] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'all' | WorkOrderStatus>('all');
+  const [workOrderFilter, setWorkOrderFilter] = useState<WorkOrderFilter>(EMPTY_FILTER);
   const [selectedEdgeParam, setSelectedEdgeParam] = useState<EdgeAngleParam | null>(null);
   const [selectedHistoryRecord, setSelectedHistoryRecord] = useState<CustomerHistoryRecord | null>(null);
   const [editingOrder, setEditingOrder] = useState<WorkOrder | null>(null);
@@ -280,13 +283,40 @@ function App() {
     };
   }, [assignments, orders, technicians]);
 
-  let filteredOrders = activeFilter
-    ? orders.filter((order) => order.boardType === activeFilter)
-    : orders;
+  const filteredOrders = useMemo(() => {
+    let result = orders;
 
-  if (statusFilter !== 'all') {
-    filteredOrders = filteredOrders.filter((o) => o.status === statusFilter);
-  }
+    if (workOrderFilter.boardType) {
+      result = result.filter((o) => o.boardType === workOrderFilter.boardType);
+    }
+
+    if (workOrderFilter.phase !== 'all') {
+      result = result.filter((o) => o.status === workOrderFilter.phase);
+    }
+
+    if (workOrderFilter.overdue === true) {
+      result = result.filter((o) => {
+        if (o.status === 'customer_delivered') return false;
+        const today = new Date();
+        const delivery = new Date(o.estimatedDelivery);
+        today.setHours(0, 0, 0, 0);
+        delivery.setHours(0, 0, 0, 0);
+        return delivery < today;
+      });
+    }
+
+    if (workOrderFilter.hasTechnician === true) {
+      result = result.filter((o) => assignments.some((a) => a.workOrderId === o.id));
+    } else if (workOrderFilter.hasTechnician === false) {
+      result = result.filter((o) => o.status !== 'customer_delivered' && !assignments.some((a) => a.workOrderId === o.id));
+    }
+
+    if (workOrderFilter.hasAbnormalReturn === true) {
+      result = result.filter((o) => o.rejectHistory && o.rejectHistory.length > 0);
+    }
+
+    return result;
+  }, [orders, workOrderFilter, assignments]);
 
   const phaseStats = useMemo(() => {
     const stats = {
@@ -486,43 +516,135 @@ function App() {
       </section>
 
       <section className="workspace">
-        <aside className="panel">
-          <h2>{project.domain}筛选</h2>
-          <div className="chips">
-            <button
-              className={!activeFilter ? 'active' : ''}
-              onClick={() => setActiveFilter(null)}
-            >
-              全部
-            </button>
-            {project.filters.map((item) => (
+        <aside className="panel filter-panel">
+          <div className="filter-panel-header">
+            <h2>组合筛选</h2>
+            {!isFilterEmpty(workOrderFilter) && (
               <button
-                key={item}
-                className={activeFilter === item ? 'active' : ''}
-                onClick={() => setActiveFilter(item)}
+                className="filter-clear-btn"
+                onClick={() => setWorkOrderFilter(EMPTY_FILTER)}
               >
-                {item}
+                ✕ 清空筛选
               </button>
-            ))}
+            )}
           </div>
 
-          <h2 style={{ marginTop: 20 }}>完工状态</h2>
-          <div className="chips">
-            <button
-              className={statusFilter === 'all' ? 'active' : ''}
-              onClick={() => setStatusFilter('all')}
-            >
-              全部
-            </button>
-            {STATUS_CONFIG.map((status) => (
+          <div className="filter-group">
+            <h3>板型</h3>
+            <div className="chips">
               <button
-                key={status.value}
-                className={statusFilter === status.value ? 'active' : ''}
-                onClick={() => setStatusFilter(status.value)}
+                className={workOrderFilter.boardType === null ? 'active' : ''}
+                onClick={() => setWorkOrderFilter((f) => ({ ...f, boardType: null }))}
               >
-                {status.label}
+                全部
               </button>
-            ))}
+              {BOARD_TYPES.map((item) => (
+                <button
+                  key={item}
+                  className={workOrderFilter.boardType === item ? 'active' : ''}
+                  onClick={() => setWorkOrderFilter((f) => ({ ...f, boardType: item }))}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="filter-group">
+            <h3>阶段</h3>
+            <div className="chips">
+              <button
+                className={workOrderFilter.phase === 'all' ? 'active' : ''}
+                onClick={() => setWorkOrderFilter((f) => ({ ...f, phase: 'all' }))}
+              >
+                全部
+              </button>
+              {STATUS_CONFIG.map((status) => (
+                <button
+                  key={status.value}
+                  className={workOrderFilter.phase === status.value ? 'active' : ''}
+                  onClick={() => setWorkOrderFilter((f) => ({ ...f, phase: status.value }))}
+                >
+                  {status.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="filter-group">
+            <h3>是否逾期</h3>
+            <div className="chips">
+              <button
+                className={workOrderFilter.overdue === null ? 'active' : ''}
+                onClick={() => setWorkOrderFilter((f) => ({ ...f, overdue: null }))}
+              >
+                全部
+              </button>
+              <button
+                className={workOrderFilter.overdue === true ? 'active' : ''}
+                onClick={() => setWorkOrderFilter((f) => ({ ...f, overdue: true }))}
+              >
+                🔴 已逾期
+              </button>
+              <button
+                className={workOrderFilter.overdue === false ? 'active' : ''}
+                onClick={() => setWorkOrderFilter((f) => ({ ...f, overdue: false }))}
+              >
+                🟢 未逾期
+              </button>
+            </div>
+          </div>
+
+          <div className="filter-group">
+            <h3>技师分配</h3>
+            <div className="chips">
+              <button
+                className={workOrderFilter.hasTechnician === null ? 'active' : ''}
+                onClick={() => setWorkOrderFilter((f) => ({ ...f, hasTechnician: null }))}
+              >
+                全部
+              </button>
+              <button
+                className={workOrderFilter.hasTechnician === true ? 'active' : ''}
+                onClick={() => setWorkOrderFilter((f) => ({ ...f, hasTechnician: true }))}
+              >
+                👤 已分配
+              </button>
+              <button
+                className={workOrderFilter.hasTechnician === false ? 'active' : ''}
+                onClick={() => setWorkOrderFilter((f) => ({ ...f, hasTechnician: false }))}
+              >
+                ⚠️ 未分配
+              </button>
+            </div>
+          </div>
+
+          <div className="filter-group">
+            <h3>异常退回</h3>
+            <div className="chips">
+              <button
+                className={workOrderFilter.hasAbnormalReturn === null ? 'active' : ''}
+                onClick={() => setWorkOrderFilter((f) => ({ ...f, hasAbnormalReturn: null }))}
+              >
+                全部
+              </button>
+              <button
+                className={workOrderFilter.hasAbnormalReturn === true ? 'active' : ''}
+                onClick={() => setWorkOrderFilter((f) => ({ ...f, hasAbnormalReturn: true }))}
+              >
+                🔙 有退回
+              </button>
+              <button
+                className={workOrderFilter.hasAbnormalReturn === false ? 'active' : ''}
+                onClick={() => setWorkOrderFilter((f) => ({ ...f, hasAbnormalReturn: false }))}
+              >
+                ✅ 无退回
+              </button>
+            </div>
+          </div>
+
+          <div className="filter-result-summary">
+            当前筛选结果：<strong>{filteredOrders.length}</strong> / {orders.length} 条工单
           </div>
         </aside>
 
@@ -544,7 +666,7 @@ function App() {
       <EdgeAngleTable params={edgeParams} onSelectParam={handleSelectEdgeParam} />
 
       <KanbanBoard
-        orders={orders}
+        orders={filteredOrders}
         assignments={assignments}
         technicians={technicians}
         onMoveOrder={handleMoveOrder}

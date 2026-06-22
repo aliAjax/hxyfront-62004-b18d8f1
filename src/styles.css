@@ -146,6 +146,53 @@ button:hover {
   border-color: var(--primary);
 }
 
+.filter-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.filter-panel-header h2 {
+  margin: 0;
+}
+
+.filter-clear-btn {
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid #dc2626;
+  background: transparent;
+  color: #dc2626;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+
+.filter-clear-btn:hover {
+  background: #dc2626;
+  color: #fff;
+}
+
+.filter-group {
+  margin-top: 14px;
+}
+
+.filter-group h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.filter-result-summary {
+  margin-top: 14px;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--primary) 6%, #f8fafc);
+  border-radius: 6px;
+  font-size: 13px;
+  color: #475569;
+}
+
 .heading {
   display: flex;
   align-items: start;
