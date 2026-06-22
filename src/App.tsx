@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useCallback } from 'react';
 import './styles.css';
 import WorkOrderForm from './WorkOrderForm';
 import WorkOrderList from './WorkOrderList';
@@ -8,12 +8,14 @@ import KanbanBoard from './KanbanBoard';
 import StatusHistoryModal from './StatusHistoryModal';
 import QuoteEstimator from './QuoteEstimator';
 import ScheduleAndDispatch from './ScheduleAndDispatch';
+import PhaseEditor from './PhaseEditor';
 import {
   WorkOrder,
   WorkOrderFormData,
   EdgeAngleParam,
   CustomerHistoryRecord,
   WorkOrderStatus,
+  WorkOrderPhase,
   StatusHistoryRecord,
   STATUS_CONFIG,
   QuoteSummary,
@@ -26,6 +28,8 @@ import {
   TechnicianStatus,
   SKILL_LEVEL_CONFIG,
   emptyFormData,
+  PHASE_ORDER,
+  getPhaseConfig,
 } from './types';
 import QualityChecklistPanel from './QualityChecklistPanel';
 import {
@@ -74,9 +78,11 @@ function App() {
   const [selectedHistoryOrder, setSelectedHistoryOrder] = useState<WorkOrder | null>(null);
   const [selectedQaOrder, setSelectedQaOrder] = useState<WorkOrder | null>(null);
   const [quoteTargetOrderId, setQuoteTargetOrderId] = useState<string | null>(null);
+  const [phaseEditorOrder, setPhaseEditorOrder] = useState<WorkOrder | null>(null);
   const quoteSectionRef = useRef<HTMLDivElement>(null);
   const qaSectionRef = useRef<HTMLDivElement>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
+  const phaseEditorRef = useRef<HTMLDivElement>(null);
 
   const handleSubmit = (formData: WorkOrderFormData, editingId?: string) => {
     if (editingId) {
@@ -187,6 +193,66 @@ function App() {
     technicianActions.updateStatus(technicianId, status);
   };
 
+  const handleOpenPhaseEditor = useCallback((order: WorkOrder) => {
+    setPhaseEditorOrder(order);
+    if (phaseEditorRef.current) {
+      phaseEditorRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, []);
+
+  const handleClosePhaseEditor = useCallback(() => {
+    setPhaseEditorOrder(null);
+  }, []);
+
+  const handlePhaseEditorUpdateFields = useCallback((orderId: string, updates: Partial<WorkOrder>, operator?: string) => {
+    const result = orderActions.updateFields(orderId, updates, operator);
+    if (result) {
+      setPhaseEditorOrder(result);
+    }
+    return result;
+  }, [orderActions]);
+
+  const handlePhaseEditorTransitionNext = useCallback((orderId: string, operator?: string, note?: string) => {
+    const result = orderActions.transitionToNextPhase(orderId, operator, note);
+    if (result) {
+      setPhaseEditorOrder(result);
+    }
+    return result;
+  }, [orderActions]);
+
+  const handlePhaseEditorRejectToPhase = useCallback((orderId: string, targetPhase: WorkOrderPhase, reason: string, operator?: string) => {
+    const result = orderActions.rejectToSpecificPhase(orderId, targetPhase, reason, operator);
+    if (result) {
+      setPhaseEditorOrder(result);
+    }
+    return result;
+  }, [orderActions]);
+
+  const handlePhaseEditorApplyQuote = useCallback((summary: QuoteSummary) => {
+    if (!phaseEditorOrder) return;
+    orderActions.applyQuote(phaseEditorOrder.id, summary);
+    const updated = orderActions.get(phaseEditorOrder.id);
+    if (updated) {
+      setPhaseEditorOrder(updated);
+    }
+  }, [phaseEditorOrder, orderActions]);
+
+  const handlePhaseEditorUpdateQaChecklist = useCallback((checklist: QualityChecklist) => {
+    if (!phaseEditorOrder) return;
+    const updated = orderActions.updateQualityChecklist(phaseEditorOrder.id, checklist);
+    if (updated) {
+      setPhaseEditorOrder(updated);
+    }
+  }, [phaseEditorOrder, orderActions]);
+
+  const handlePhaseEditorCreateQaChecklist = useCallback(() => {
+    if (!phaseEditorOrder) return;
+    const checklist = orderActions.createQualityChecklist(phaseEditorOrder.id);
+    if (checklist) {
+      setPhaseEditorOrder((prev) => (prev ? { ...prev, qualityChecklist: checklist } : null));
+    }
+  }, [phaseEditorOrder, orderActions]);
+
   const assignmentStats = useMemo(() => {
     const assignedCount = assignments.length;
     const pendingAssign = orders.filter(
@@ -223,12 +289,23 @@ function App() {
     filteredOrders = filteredOrders.filter((o) => o.status === statusFilter);
   }
 
-  const inspectionCount = orders.filter((o) => o.status === 'pending_inspection').length;
-  const waxCount = orders.filter((o) => o.status === 'pending_wax').length;
-  const repairCount = orders.filter((o) => o.status === 'pending_base_repair').length;
-  const qaCount = orders.filter((o) => o.status === 'pending_qa').length;
-  const deliveredCount = orders.filter((o) => o.status === 'delivered').length;
-  const inProgressCount = orders.length - deliveredCount;
+  const phaseStats = useMemo(() => {
+    const stats = {
+      boardReceived: orders.filter((o) => o.status === 'board_received').length,
+      damageAssessment: orders.filter((o) => o.status === 'damage_assessment').length,
+      tuningQuote: orders.filter((o) => o.status === 'tuning_quote').length,
+      technicianWork: orders.filter((o) => o.status === 'technician_work').length,
+      qualityCheck: orders.filter((o) => o.status === 'quality_check').length,
+      customerDelivered: orders.filter((o) => o.status === 'customer_delivered').length,
+    };
+    return stats;
+  }, [orders]);
+
+  const workOrderStats = useMemo(() => {
+    return orderActions.getStatistics();
+  }, [orders, orderActions]);
+
+  const inProgressCount = orders.length - phaseStats.customerDelivered;
 
   const avgSideEdge = orders.length
     ? (
@@ -244,7 +321,7 @@ function App() {
   ).length;
 
   const overdueCount = orders.filter((o) => {
-    if (o.status === 'delivered') return false;
+    if (o.status === 'customer_delivered') return false;
     const today = new Date();
     const delivery = new Date(o.estimatedDelivery);
     today.setHours(0, 0, 0, 0);
@@ -359,47 +436,45 @@ function App() {
       </section>
 
       <section className="metrics">
-        <article>
-          <small>待检查</small>
-          <strong>{inspectionCount}</strong>
+        <article style={{ borderTop: '3px solid #0ea5e9' }}>
+          <small>接板登记</small>
+          <strong style={{ color: '#0ea5e9' }}>{phaseStats.boardReceived}</strong>
+        </article>
+        <article style={{ borderTop: '3px solid #f97316' }}>
+          <small>损伤评估</small>
+          <strong style={{ color: '#f97316' }}>{phaseStats.damageAssessment}</strong>
+        </article>
+        <article style={{ borderTop: '3px solid #8b5cf6' }}>
+          <small>调校报价</small>
+          <strong style={{ color: '#8b5cf6' }}>{phaseStats.tuningQuote}</strong>
+        </article>
+        <article style={{ borderTop: '3px solid #dc2626' }}>
+          <small>技师施工</small>
+          <strong style={{ color: '#dc2626' }}>{phaseStats.technicianWork}</strong>
+        </article>
+        <article style={{ borderTop: '3px solid #7c3aed' }}>
+          <small>质检确认</small>
+          <strong style={{ color: '#7c3aed' }}>{phaseStats.qualityCheck}</strong>
+        </article>
+        <article style={{ borderTop: '3px solid #14b8a6' }}>
+          <small>客户交付</small>
+          <strong style={{ color: '#14b8a6' }}>{phaseStats.customerDelivered}</strong>
         </article>
         <article>
-          <small>待打蜡</small>
-          <strong>{waxCount}</strong>
-        </article>
-        <article>
-          <small>待补底</small>
-          <strong>{repairCount}</strong>
-        </article>
-        <article>
-          <small>待质检</small>
-          <strong>{qaCount}</strong>
-        </article>
-        <article>
-          <small>已交付</small>
-          <strong style={{ color: 'var(--secondary)' }}>{deliveredCount}</strong>
+          <small>今日交付</small>
+          <strong style={{ color: 'var(--secondary)' }}>{workOrderStats.deliveredToday}</strong>
         </article>
         <article>
           <small>进行中</small>
           <strong>{inProgressCount}</strong>
         </article>
         <article>
-          <small>已分配</small>
-          <strong style={{ color: 'var(--secondary)' }}>{assignmentStats.assignedCount}</strong>
+          <small>异常退回</small>
+          <strong style={{ color: workOrderStats.rejectedCount > 0 ? 'var(--error)' : 'inherit' }}>{workOrderStats.rejectedCount}</strong>
         </article>
         <article>
-          <small>待分配</small>
-          <strong style={{ color: assignmentStats.pendingAssign > 0 ? 'var(--accent)' : 'inherit' }}>{assignmentStats.pendingAssign}</strong>
-        </article>
-        <article>
-          <small>整体负荷</small>
-          <strong style={{ color: assignmentStats.overallLoad > 85 ? 'var(--error)' : assignmentStats.overallLoad > 70 ? 'var(--accent)' : 'var(--secondary)' }}>
-            {assignmentStats.overallLoad}%
-          </strong>
-        </article>
-        <article>
-          <small>超负荷技师</small>
-          <strong style={{ color: assignmentStats.overloadedTechs > 0 ? 'var(--error)' : 'inherit' }}>{assignmentStats.overloadedTechs}</strong>
+          <small>平均周期</small>
+          <strong>{workOrderStats.avgCycleTime} 天</strong>
         </article>
         <article>
           <small>逾期工单</small>
@@ -477,6 +552,7 @@ function App() {
         onViewHistory={handleViewHistory}
         onOpenQuote={handleOpenQuote}
         onOpenQa={handleOpenQaChecklist}
+        onOpenPhaseEditor={handleOpenPhaseEditor}
       />
 
       <ScheduleAndDispatch
@@ -521,7 +597,25 @@ function App() {
         onOpenQa={handleOpenQaChecklist}
         assignments={assignments}
         technicians={technicians}
+        onOpenPhaseEditor={handleOpenPhaseEditor}
       />
+
+      <div ref={phaseEditorRef}>
+        {phaseEditorOrder && (
+          <div className="phase-editor-wrapper">
+            <PhaseEditor
+              order={phaseEditorOrder}
+              onUpdateFields={handlePhaseEditorUpdateFields}
+              onTransitionNext={handlePhaseEditorTransitionNext}
+              onRejectToPhase={handlePhaseEditorRejectToPhase}
+              onApplyQuote={handlePhaseEditorApplyQuote}
+              onUpdateQualityChecklist={handlePhaseEditorUpdateQaChecklist}
+              onCreateQualityChecklist={handlePhaseEditorCreateQaChecklist}
+              onClose={handleClosePhaseEditor}
+            />
+          </div>
+        )}
+      </div>
 
       <StatusHistoryModal
         order={selectedHistoryOrder}

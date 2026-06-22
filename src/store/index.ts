@@ -3,6 +3,7 @@ import {
   WorkOrder,
   WorkOrderFormData,
   WorkOrderStatus,
+  WorkOrderPhase,
   StatusHistoryRecord,
   STATUS_CONFIG,
   QualityChecklist,
@@ -20,6 +21,16 @@ import {
   WorkOrderAssignment,
   QuoteSummary,
   BaseDamageMark,
+  EditableField,
+  FieldChangeRecord,
+  RejectRecord,
+  getPhaseConfig,
+  getNextPhase,
+  getPreviousPhase,
+  canEditField,
+  validatePhaseCompletion,
+  PHASE_ORDER,
+  FIELD_LABELS,
 } from '../types';
 
 export type StoreEvent =
@@ -274,7 +285,7 @@ class WorkOrderStore {
     const newOrder: WorkOrder = {
       ...formData,
       id,
-      status: 'pending_inspection',
+      status: 'board_received',
       createdAt: WorkOrderStore.formatDate(),
       estimatedDelivery,
       riskWarning: '',
@@ -283,11 +294,13 @@ class WorkOrderStore {
         {
           id: `SH-${id}-${Date.now()}`,
           fromStatus: null,
-          toStatus: 'pending_inspection',
+          toStatus: 'board_received',
           timestamp: WorkOrderStore.formatTimestamp(),
-          note: '工单创建',
+          note: '工单创建，接板登记完成',
         },
       ],
+      fieldChangeHistory: [],
+      rejectHistory: [],
     };
 
     this.workOrders = [newOrder, ...this.workOrders];
@@ -295,6 +308,281 @@ class WorkOrderStore {
     this.emit('workOrders:changed', this.getWorkOrders());
 
     return newOrder;
+  }
+
+  updateWorkOrderFields(orderId: string, updates: Partial<WorkOrder>, operator?: string): WorkOrder | undefined {
+    const index = this.workOrders.findIndex((o) => o.id === orderId);
+    if (index === -1) return undefined;
+
+    const order = this.workOrders[index];
+    const currentPhase = order.status as WorkOrderPhase;
+
+    const validUpdates: Partial<WorkOrder> = {};
+    const fieldChanges: FieldChangeRecord[] = [];
+
+    Object.entries(updates).forEach(([key, value]) => {
+      const field = key as EditableField;
+      if (canEditField(currentPhase, field)) {
+        const oldValue = order[field as keyof WorkOrder];
+        if (JSON.stringify(oldValue) !== JSON.stringify(value)) {
+          validUpdates[field as keyof WorkOrder] = value;
+          fieldChanges.push({
+            id: `FC-${orderId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            field,
+            oldValue,
+            newValue: value,
+            changedAt: WorkOrderStore.formatTimestamp(),
+            changedBy: operator,
+            note: `在${getPhaseConfig(currentPhase).label}阶段修改`,
+          });
+        }
+      }
+    });
+
+    if (Object.keys(validUpdates).length === 0) {
+      return order;
+    }
+
+    const updated: WorkOrder = {
+      ...order,
+      ...validUpdates,
+      fieldChangeHistory: [...order.fieldChangeHistory, ...fieldChanges],
+    };
+
+    this.workOrders[index] = updated;
+    this.workOrders = [...this.workOrders];
+
+    this.persistImmediate(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
+    this.emit('workOrders:changed', this.getWorkOrders());
+
+    return updated;
+  }
+
+  transitionToNextPhase(orderId: string, operator?: string, note?: string): WorkOrder | undefined {
+    const order = this.workOrders.find((o) => o.id === orderId);
+    if (!order) return undefined;
+
+    const currentPhase = order.status as WorkOrderPhase;
+    const nextPhase = getNextPhase(currentPhase);
+    if (!nextPhase) {
+      throw new Error('已处于最终阶段，无法继续推进');
+    }
+
+    const config = getPhaseConfig(currentPhase);
+    if (!config.canTransitionForward) {
+      throw new Error('当前阶段不允许推进到下一阶段');
+    }
+
+    const validation = validatePhaseCompletion(order, currentPhase);
+    if (!validation.valid) {
+      throw new Error(`无法推进：${validation.errors.join('；')}`);
+    }
+
+    if (nextPhase === 'customer_delivered') {
+      if (!order.qualityChecklist) {
+        throw new Error('请先完成质检检查清单后再交付');
+      }
+      if (hasQualityCheckFailedItems(order.qualityChecklist)) {
+        throw new Error('质检存在不通过项，无法交付。请先修复所有不通过项后再尝试交付。');
+      }
+      if (!isQualityCheckCompleted(order.qualityChecklist)) {
+        throw new Error('请先完成所有质检项并确保全部通过后再交付');
+      }
+    }
+
+    const nextPhaseConfig = getPhaseConfig(nextPhase);
+    const historyRecord: StatusHistoryRecord = {
+      id: `SH-${order.id}-${Date.now()}`,
+      fromStatus: order.status,
+      toStatus: nextPhase,
+      timestamp: WorkOrderStore.formatTimestamp(),
+      note: note ?? `推进至${nextPhaseConfig.label}`,
+      fieldChanges: order.fieldChangeHistory.slice(-5),
+    };
+
+    const updated: WorkOrder = {
+      ...order,
+      status: nextPhase,
+      statusHistory: [...order.statusHistory, historyRecord],
+      actualDelivery: nextPhase === 'customer_delivered' ? WorkOrderStore.formatDate() : order.actualDelivery,
+    };
+
+    const index = this.workOrders.findIndex((o) => o.id === orderId);
+    this.workOrders[index] = updated;
+    this.workOrders = [...this.workOrders];
+
+    if (nextPhase === 'customer_delivered') {
+      this.syncOrderToCustomerHistory(updated);
+      this.assignments = this.assignments.filter((a) => a.workOrderId !== orderId);
+      this.persistImmediate(STORAGE_KEYS.ASSIGNMENTS, this.assignments);
+      this.emit('assignments:changed', this.getAssignments());
+    }
+
+    this.persistImmediate(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
+    this.emit('workOrders:changed', this.getWorkOrders());
+
+    return updated;
+  }
+
+  rejectToPreviousPhase(orderId: string, reason: string, operator?: string): WorkOrder | undefined {
+    const order = this.workOrders.find((o) => o.id === orderId);
+    if (!order) return undefined;
+
+    const currentPhase = order.status as WorkOrderPhase;
+    const previousPhase = getPreviousPhase(currentPhase);
+    if (!previousPhase) {
+      throw new Error('已处于初始阶段，无法退回');
+    }
+
+    const config = getPhaseConfig(currentPhase);
+    if (!config.canReject) {
+      throw new Error('当前阶段不允许异常退回');
+    }
+
+    if (!reason || reason.trim().length < 5) {
+      throw new Error('请填写详细的退回原因（至少5个字符）');
+    }
+
+    const rejectRecord: RejectRecord = {
+      id: `REJ-${orderId}-${Date.now()}`,
+      fromPhase: currentPhase,
+      toPhase: previousPhase,
+      reason: reason.trim(),
+      rejectedAt: WorkOrderStore.formatTimestamp(),
+      rejectedBy: operator,
+    };
+
+    const previousPhaseConfig = getPhaseConfig(previousPhase);
+    const historyRecord: StatusHistoryRecord = {
+      id: `SH-${order.id}-${Date.now()}`,
+      fromStatus: order.status,
+      toStatus: previousPhase,
+      timestamp: WorkOrderStore.formatTimestamp(),
+      note: `异常退回至${previousPhaseConfig.label}：${reason.trim()}`,
+      isReject: true,
+      rejectReason: reason.trim(),
+    };
+
+    const updated: WorkOrder = {
+      ...order,
+      status: previousPhase,
+      statusHistory: [...order.statusHistory, historyRecord],
+      rejectHistory: [...order.rejectHistory, rejectRecord],
+    };
+
+    const index = this.workOrders.findIndex((o) => o.id === orderId);
+    this.workOrders[index] = updated;
+    this.workOrders = [...this.workOrders];
+
+    this.persistImmediate(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
+    this.emit('workOrders:changed', this.getWorkOrders());
+
+    return updated;
+  }
+
+  rejectToSpecificPhase(orderId: string, targetPhase: WorkOrderPhase, reason: string, operator?: string): WorkOrder | undefined {
+    const order = this.workOrders.find((o) => o.id === orderId);
+    if (!order) return undefined;
+
+    const currentPhase = order.status as WorkOrderPhase;
+    const currentIndex = PHASE_ORDER.indexOf(currentPhase);
+    const targetIndex = PHASE_ORDER.indexOf(targetPhase);
+
+    if (targetIndex >= currentIndex) {
+      throw new Error('只能退回到之前的阶段');
+    }
+
+    const config = getPhaseConfig(currentPhase);
+    if (!config.canReject) {
+      throw new Error('当前阶段不允许异常退回');
+    }
+
+    if (!reason || reason.trim().length < 5) {
+      throw new Error('请填写详细的退回原因（至少5个字符）');
+    }
+
+    const rejectRecord: RejectRecord = {
+      id: `REJ-${orderId}-${Date.now()}`,
+      fromPhase: currentPhase,
+      toPhase: targetPhase,
+      reason: reason.trim(),
+      rejectedAt: WorkOrderStore.formatTimestamp(),
+      rejectedBy: operator,
+    };
+
+    const targetPhaseConfig = getPhaseConfig(targetPhase);
+    const historyRecord: StatusHistoryRecord = {
+      id: `SH-${order.id}-${Date.now()}`,
+      fromStatus: order.status,
+      toStatus: targetPhase,
+      timestamp: WorkOrderStore.formatTimestamp(),
+      note: `异常退回至${targetPhaseConfig.label}：${reason.trim()}`,
+      isReject: true,
+      rejectReason: reason.trim(),
+    };
+
+    const updated: WorkOrder = {
+      ...order,
+      status: targetPhase,
+      statusHistory: [...order.statusHistory, historyRecord],
+      rejectHistory: [...order.rejectHistory, rejectRecord],
+    };
+
+    const index = this.workOrders.findIndex((o) => o.id === orderId);
+    this.workOrders[index] = updated;
+    this.workOrders = [...this.workOrders];
+
+    this.persistImmediate(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
+    this.emit('workOrders:changed', this.getWorkOrders());
+
+    return updated;
+  }
+
+  getPhaseWorkOrders(phase: WorkOrderPhase): WorkOrder[] {
+    return this.workOrders.filter((o) => o.status === phase);
+  }
+
+  getWorkOrderStatistics() {
+    const stats = {
+      total: this.workOrders.length,
+      byPhase: {} as Record<WorkOrderPhase, number>,
+      overdue: 0,
+      rejectedCount: 0,
+      avgCycleTime: 0,
+      deliveredToday: 0,
+    };
+
+    PHASE_ORDER.forEach((phase) => {
+      stats.byPhase[phase] = this.workOrders.filter((o) => o.status === phase).length;
+    });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    stats.overdue = this.workOrders.filter((o) => {
+      if (o.status === 'customer_delivered') return false;
+      const delivery = new Date(o.estimatedDelivery);
+      delivery.setHours(0, 0, 0, 0);
+      return delivery < today;
+    }).length;
+
+    stats.rejectedCount = this.workOrders.filter((o) => o.rejectHistory && o.rejectHistory.length > 0).length;
+
+    const deliveredOrders = this.workOrders.filter((o) => o.status === 'customer_delivered' && o.actualDelivery);
+    if (deliveredOrders.length > 0) {
+      const totalDays = deliveredOrders.reduce((sum, o) => {
+        const created = new Date(o.createdAt);
+        const delivered = new Date(o.actualDelivery!);
+        const diff = Math.ceil((delivered.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
+        return sum + Math.max(0, diff);
+      }, 0);
+      stats.avgCycleTime = Math.round((totalDays / deliveredOrders.length) * 10) / 10;
+    }
+
+    const todayStr = WorkOrderStore.formatDate();
+    stats.deliveredToday = deliveredOrders.filter((o) => o.actualDelivery === todayStr).length;
+
+    return stats;
   }
 
   updateWorkOrder(id: string, updates: Partial<WorkOrderFormData>): WorkOrder | undefined {

@@ -4,6 +4,7 @@ import {
   WorkOrder,
   WorkOrderFormData,
   WorkOrderStatus,
+  WorkOrderPhase,
   QualityChecklist,
   QuoteSummary,
   BaseDamageMark,
@@ -146,6 +147,39 @@ export function useWorkOrderActions() {
         workOrderStore.updateQualityChecklist(orderId, checklist),
       applyQuote: (orderId: string, summary: QuoteSummary) =>
         workOrderStore.applyQuote(orderId, summary),
+      updateFields: (orderId: string, updates: Partial<WorkOrder>, operator?: string) => {
+        try {
+          return workOrderStore.updateWorkOrderFields(orderId, updates, operator);
+        } catch (e) {
+          alert((e as Error).message);
+          return undefined;
+        }
+      },
+      transitionToNextPhase: (orderId: string, operator?: string, note?: string) => {
+        try {
+          return workOrderStore.transitionToNextPhase(orderId, operator, note);
+        } catch (e) {
+          alert((e as Error).message);
+          return undefined;
+        }
+      },
+      rejectToPreviousPhase: (orderId: string, reason: string, operator?: string) => {
+        try {
+          return workOrderStore.rejectToPreviousPhase(orderId, reason, operator);
+        } catch (e) {
+          alert((e as Error).message);
+          return undefined;
+        }
+      },
+      rejectToSpecificPhase: (orderId: string, targetPhase: WorkOrderPhase, reason: string, operator?: string) => {
+        try {
+          return workOrderStore.rejectToSpecificPhase(orderId, targetPhase, reason, operator);
+        } catch (e) {
+          alert((e as Error).message);
+          return undefined;
+        }
+      },
+      getStatistics: () => workOrderStore.getWorkOrderStatistics(),
     }),
     []
   );

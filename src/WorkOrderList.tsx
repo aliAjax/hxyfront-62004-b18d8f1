@@ -7,6 +7,7 @@ interface WorkOrderListProps {
   editingOrderId: string | null;
   onOpenQuote?: (order: WorkOrder) => void;
   onOpenQa?: (order: WorkOrder) => void;
+  onOpenPhaseEditor?: (order: WorkOrder) => void;
   assignments?: WorkOrderAssignment[];
   technicians?: Technician[];
 }
@@ -25,7 +26,7 @@ const getDamageTypeLabel = (type: string) =>
 const getSeverityLabel = (sev: string) =>
   SEVERITY_LEVELS.find((s) => s.value === sev)?.label ?? sev;
 
-export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, editingOrderId, onOpenQuote, onOpenQa, assignments = [], technicians = [] }: WorkOrderListProps) {
+export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, editingOrderId, onOpenQuote, onOpenQa, onOpenPhaseEditor, assignments = [], technicians = [] }: WorkOrderListProps) {
   return (
     <section className="panel">
       <div className="heading">
@@ -144,6 +145,19 @@ export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, edi
                 )}
 
                 <div className="record-actions">
+                  {onOpenPhaseEditor && (
+                    <button
+                      className="small-btn"
+                      onClick={() => onOpenPhaseEditor(order)}
+                      style={{
+                        background: 'linear-gradient(135deg, #0ea5e9, #8b5cf6)',
+                        color: 'white',
+                        border: 'none',
+                      }}
+                    >
+                      ⚙️ 流程编辑
+                    </button>
+                  )}
                   <button
                     className="secondary small-btn"
                     onClick={() => onEditOrder(order)}
@@ -168,10 +182,10 @@ export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, edi
                     </button>
                   )}
                   <button
-                    className={`small-btn ${order.status === 'delivered' ? 'secondary' : 'primary'}`}
+                    className={`small-btn ${order.status === 'customer_delivered' ? 'secondary' : 'primary'}`}
                     onClick={() => onToggleStatus(order.id)}
                   >
-                    {order.status === 'delivered' ? '重新开始' : '推进状态'}
+                    {order.status === 'customer_delivered' ? '重新开始' : '推进状态'}
                   </button>
                 </div>
               </div>

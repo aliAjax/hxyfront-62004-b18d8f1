@@ -7,6 +7,7 @@ interface WorkOrderCardProps {
   onViewHistory: (order: WorkOrder) => void;
   onOpenQuote?: (order: WorkOrder) => void;
   onOpenQa?: (order: WorkOrder) => void;
+  onOpenPhaseEditor?: (order: WorkOrder) => void;
   assignment?: WorkOrderAssignment;
   technician?: Technician;
 }
@@ -35,7 +36,7 @@ const getDaysUntilDelivery = (estimatedDelivery: string) => {
   return diffDays;
 };
 
-export default function WorkOrderCard({ order, onDragStart, onDragEnd, onViewHistory, onOpenQuote, onOpenQa, assignment, technician }: WorkOrderCardProps) {
+export default function WorkOrderCard({ order, onDragStart, onDragEnd, onViewHistory, onOpenQuote, onOpenQa, onOpenPhaseEditor, assignment, technician }: WorkOrderCardProps) {
   const hasMarks = order.damageMarks && order.damageMarks.length > 0;
   const statusInfo = STATUS_CONFIG.find((s) => s.value === order.status);
   const overdue = isOverdue(order.estimatedDelivery);
@@ -199,7 +200,23 @@ export default function WorkOrderCard({ order, onDragStart, onDragEnd, onViewHis
 
       <div className="kanban-card-footer">
         <span className="card-date">创建于 {order.createdAt}</span>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {onOpenPhaseEditor && (
+            <button
+              className="card-history-btn phase-editor-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenPhaseEditor(order);
+              }}
+              style={{
+                background: 'linear-gradient(135deg, #0ea5e9, #8b5cf6)',
+                color: 'white',
+                border: 'none',
+              }}
+            >
+              ⚙️ 流程编辑
+            </button>
+          )}
           {onOpenQuote && (
             <button
               className="card-history-btn"
