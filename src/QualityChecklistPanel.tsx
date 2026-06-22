@@ -39,8 +39,8 @@ export default function QualityChecklistPanel({
   const [editingChecklist, setEditingChecklist] = useState<QualityChecklist | null>(null);
 
   const isCompleted = isQualityCheckCompleted(checklist);
-  const canEdit = workOrderStatus === 'pending_qa' && !isCompleted;
-  const canStart = !checklist && workOrderStatus === 'pending_qa';
+  const canEdit = workOrderStatus === 'quality_check' && !isCompleted;
+  const canStart = !checklist && workOrderStatus === 'quality_check';
 
   const handleStartEdit = () => {
     if (!checklist) return;
