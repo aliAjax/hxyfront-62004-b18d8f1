@@ -293,10 +293,15 @@ function App() {
         baseEdgeAngle: chr.baseEdgeAngle,
         waxType: chr.waxType,
         customerPreference: chr.deliveryNote,
+        baseDamage: chr.baseDamage || '',
+        repairLocation: chr.repairLocation || '',
+        damageMarks: Array.isArray(chr.damageMarks)
+          ? chr.damageMarks.map((m) => ({ ...m, id: `hist-${m.id}-${Date.now()}` }))
+          : [],
       };
     }
 
-    const result = orderActions.updateFields(phaseEditorOrder.id, updates);
+    const result = orderActions.applyRelatedHistory(phaseEditorOrder.id, updates);
     if (result) {
       setPhaseEditorOrder(result);
     }

@@ -96,9 +96,11 @@ export default function RelatedHistoryModal({
           baseEdgeAngle: record.baseEdgeAngle,
           waxType: record.waxType,
           customerPreference: record.deliveryNote || '',
-          damageMarks: [],
-          baseDamage: '',
-          repairLocation: '',
+          damageMarks: Array.isArray(record.damageMarks)
+            ? record.damageMarks
+            : [],
+          baseDamage: record.baseDamage || '',
+          repairLocation: record.repairLocation || '',
           maintenanceItems: record.maintenanceItems || '',
           qualityChecklist: safeChecklist || undefined,
           qaOverallNote: safeChecklist?.overallNote,

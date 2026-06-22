@@ -155,6 +155,14 @@ export function useWorkOrderActions() {
           return undefined;
         }
       },
+      applyRelatedHistory: (orderId: string, updates: Partial<WorkOrder>, operator?: string) => {
+        try {
+          return workOrderStore.applyRelatedHistoryToWorkOrder(orderId, updates, operator);
+        } catch (e) {
+          alert((e as Error).message);
+          return undefined;
+        }
+      },
       transitionToNextPhase: (orderId: string, operator?: string, note?: string) => {
         try {
           return workOrderStore.transitionToNextPhase(orderId, operator, note);

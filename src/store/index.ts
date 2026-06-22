@@ -169,13 +169,13 @@ class WorkOrderStore {
 
       if (wasInitialized) {
         this.workOrders = storedOrders ?? [];
-        this.customerHistory = storedHistory ?? [];
+        this.customerHistory = WorkOrderStore.hydrateHistoryDamage(storedHistory ?? []);
         this.technicians = storedTechs ?? [];
         this.assignments = storedAssigns ?? [];
         this.edgeParams = storedParams ?? [];
       } else {
         this.workOrders = [...initialWorkOrders];
-        this.customerHistory = [...initialCustomerHistory];
+        this.customerHistory = WorkOrderStore.hydrateHistoryDamage([...initialCustomerHistory]);
         this.technicians = [...initialTechnicians];
         this.assignments = [...initialAssignments];
         this.edgeParams = [...initialEdgeAngleParams];
@@ -275,6 +275,24 @@ class WorkOrderStore {
     ).padStart(2, '0')}`;
   }
 
+  private static hydrateHistoryDamage(records: CustomerHistoryRecord[]): CustomerHistoryRecord[] {
+    const seedById = new Map(initialCustomerHistory.map((record) => [record.id, record]));
+    return records.map((record) => {
+      const seed = seedById.get(record.id);
+      if (!seed) return record;
+
+      return {
+        ...record,
+        baseDamage: record.baseDamage ?? seed.baseDamage,
+        repairLocation: record.repairLocation ?? seed.repairLocation,
+        damageMarks:
+          Array.isArray(record.damageMarks) && record.damageMarks.length > 0
+            ? record.damageMarks
+            : seed.damageMarks,
+      };
+    });
+  }
+
   createWorkOrder(formData: WorkOrderFormData): WorkOrder {
     const today = new Date();
     const deliveryDate = new Date(today);
@@ -336,6 +354,61 @@ class WorkOrderStore {
             note: `在${getPhaseConfig(currentPhase).label}阶段修改`,
           });
         }
+      }
+    });
+
+    if (Object.keys(validUpdates).length === 0) {
+      return order;
+    }
+
+    const updated: WorkOrder = {
+      ...order,
+      ...validUpdates,
+      fieldChangeHistory: [...order.fieldChangeHistory, ...fieldChanges],
+    };
+
+    this.workOrders[index] = updated;
+    this.workOrders = [...this.workOrders];
+
+    this.persistImmediate(STORAGE_KEYS.WORK_ORDERS, this.workOrders);
+    this.emit('workOrders:changed', this.getWorkOrders());
+
+    return updated;
+  }
+
+  applyRelatedHistoryToWorkOrder(orderId: string, updates: Partial<WorkOrder>, operator?: string): WorkOrder | undefined {
+    const index = this.workOrders.findIndex((o) => o.id === orderId);
+    if (index === -1) return undefined;
+
+    const order = this.workOrders[index];
+    const allowedFields: EditableField[] = [
+      'boardType',
+      'sideEdgeAngle',
+      'baseEdgeAngle',
+      'waxType',
+      'customerPreference',
+      'baseDamage',
+      'repairLocation',
+      'damageMarks',
+    ];
+    const validUpdates: Partial<WorkOrder> = {};
+    const fieldChanges: FieldChangeRecord[] = [];
+
+    allowedFields.forEach((field) => {
+      if (!(field in updates)) return;
+      const value = updates[field as keyof WorkOrder];
+      const oldValue = order[field as keyof WorkOrder];
+      if (JSON.stringify(oldValue) !== JSON.stringify(value)) {
+        (validUpdates as any)[field] = value;
+        fieldChanges.push({
+          id: `FC-${orderId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          field,
+          oldValue,
+          newValue: value,
+          changedAt: WorkOrderStore.formatTimestamp(),
+          changedBy: operator,
+          note: '通过关联历史回填',
+        });
       }
     });
 
@@ -810,6 +883,9 @@ class WorkOrderStore {
       waxType: order.waxType,
       sideEdgeAngle: order.sideEdgeAngle,
       baseEdgeAngle: order.baseEdgeAngle,
+      baseDamage: order.baseDamage,
+      repairLocation: order.repairLocation,
+      damageMarks: Array.isArray(order.damageMarks) ? order.damageMarks : [],
       deliveryNote: order.qualityChecklist?.overallNote || '',
       createdAt: WorkOrderStore.formatDate(),
       qualityChecklist: order.qualityChecklist,
@@ -1016,7 +1092,7 @@ class WorkOrderStore {
 
     if (mode === 'replace') {
       this.workOrders = snapshot.workOrders;
-      this.customerHistory = snapshot.customerHistory;
+      this.customerHistory = WorkOrderStore.hydrateHistoryDamage(snapshot.customerHistory);
       this.technicians = snapshot.technicians;
       this.assignments = snapshot.assignments;
       this.edgeParams = snapshot.edgeParams;
@@ -1027,7 +1103,7 @@ class WorkOrderStore {
 
       const historyIdMap = new Map(this.customerHistory.map((h) => [h.id, h]));
       snapshot.customerHistory.forEach((h) => historyIdMap.set(h.id, h));
-      this.customerHistory = Array.from(historyIdMap.values());
+      this.customerHistory = WorkOrderStore.hydrateHistoryDamage(Array.from(historyIdMap.values()));
 
       const techIdMap = new Map(this.technicians.map((t) => [t.id, t]));
       snapshot.technicians.forEach((t) => techIdMap.set(t.id, t));
@@ -1092,7 +1168,7 @@ class WorkOrderStore {
 
   async resetAll(): Promise<void> {
     this.workOrders = [...initialWorkOrders];
-    this.customerHistory = [...initialCustomerHistory];
+    this.customerHistory = WorkOrderStore.hydrateHistoryDamage([...initialCustomerHistory]);
     this.technicians = [...initialTechnicians];
     this.assignments = [...initialAssignments];
     this.edgeParams = [...initialEdgeAngleParams];

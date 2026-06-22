@@ -1149,6 +1149,9 @@ export interface CustomerHistoryRecord {
   waxType: string;
   sideEdgeAngle: string;
   baseEdgeAngle: string;
+  baseDamage?: string;
+  repairLocation?: string;
+  damageMarks?: BaseDamageMark[];
   deliveryNote: string;
   createdAt: string;
   qualityChecklist?: QualityChecklist;
@@ -1166,6 +1169,20 @@ export const initialCustomerHistory: CustomerHistoryRecord[] = [
     waxType: '低温蜡',
     sideEdgeAngle: '88°',
     baseEdgeAngle: '1°',
+    baseDamage: '轻微划痕',
+    repairLocation: '板腰',
+    damageMarks: [
+      {
+        id: 'DM-CHR-001-1',
+        type: 'scratch',
+        x: 44,
+        y: 54,
+        locationNote: '板腰中部',
+        length: '3',
+        severity: 'mild',
+        repairMethod: '底座打磨',
+      },
+    ],
     deliveryNote: '客户偏好中等咬雪，侧刃不要太锐，下次维护前可保持当前角度',
     createdAt: '2024-01-10',
     qualityChecklist: {
@@ -1196,6 +1213,20 @@ export const initialCustomerHistory: CustomerHistoryRecord[] = [
     waxType: '中温蜡',
     sideEdgeAngle: '89°',
     baseEdgeAngle: '1.5°',
+    baseDamage: '板底刮痕',
+    repairLocation: '板腰',
+    damageMarks: [
+      {
+        id: 'DM-CHR-002-1',
+        type: 'scratch',
+        x: 51,
+        y: 58,
+        locationNote: '板腰偏右',
+        length: '5',
+        severity: 'mild',
+        repairMethod: '底座打磨',
+      },
+    ],
     deliveryNote: '粉雪板用钝刃即可，底刃1.5°适合深粉雪，注意板底刮痕修复',
     createdAt: '2023-12-05',
   },
@@ -1254,6 +1285,20 @@ export const initialCustomerHistory: CustomerHistoryRecord[] = [
     waxType: '高温蜡',
     sideEdgeAngle: '90°',
     baseEdgeAngle: '1°',
+    baseDamage: '板底凹坑',
+    repairLocation: '板头',
+    damageMarks: [
+      {
+        id: 'DM-CHR-005-1',
+        type: 'dent',
+        x: 50,
+        y: 23,
+        locationNote: '板头中央',
+        length: '2',
+        severity: 'mild',
+        repairMethod: '环氧树脂修补',
+      },
+    ],
     deliveryNote: '公园板钝刃防卡刃，底刃1°保持稳定，高温蜡适合室内雪场',
     createdAt: '2024-01-12',
   },
@@ -1268,6 +1313,20 @@ export const initialCustomerHistory: CustomerHistoryRecord[] = [
     waxType: '无氟蜡',
     sideEdgeAngle: '89°',
     baseEdgeAngle: '0.5°',
+    baseDamage: '板尾撞痕',
+    repairLocation: '板尾',
+    damageMarks: [
+      {
+        id: 'DM-CHR-006-1',
+        type: 'burn',
+        x: 54,
+        y: 82,
+        locationNote: '板尾左侧',
+        length: '4',
+        severity: 'severe',
+        repairMethod: '整块更换',
+      },
+    ],
     deliveryNote: '湿软雪况稍锐侧刃，板尾有撞痕需注意修补质量',
     createdAt: '2023-10-28',
   },
