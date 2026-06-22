@@ -285,6 +285,14 @@ function App() {
 
   const filteredOrders = useMemo(() => {
     let result = orders;
+    const isOrderOverdue = (order: WorkOrder) => {
+      if (order.status === 'customer_delivered') return false;
+      const today = new Date();
+      const delivery = new Date(order.estimatedDelivery);
+      today.setHours(0, 0, 0, 0);
+      delivery.setHours(0, 0, 0, 0);
+      return delivery < today;
+    };
 
     if (workOrderFilter.boardType) {
       result = result.filter((o) => o.boardType === workOrderFilter.boardType);
@@ -294,15 +302,8 @@ function App() {
       result = result.filter((o) => o.status === workOrderFilter.phase);
     }
 
-    if (workOrderFilter.overdue === true) {
-      result = result.filter((o) => {
-        if (o.status === 'customer_delivered') return false;
-        const today = new Date();
-        const delivery = new Date(o.estimatedDelivery);
-        today.setHours(0, 0, 0, 0);
-        delivery.setHours(0, 0, 0, 0);
-        return delivery < today;
-      });
+    if (workOrderFilter.overdue !== null) {
+      result = result.filter((o) => isOrderOverdue(o) === workOrderFilter.overdue);
     }
 
     if (workOrderFilter.hasTechnician === true) {
@@ -311,8 +312,8 @@ function App() {
       result = result.filter((o) => o.status !== 'customer_delivered' && !assignments.some((a) => a.workOrderId === o.id));
     }
 
-    if (workOrderFilter.hasAbnormalReturn === true) {
-      result = result.filter((o) => o.rejectHistory && o.rejectHistory.length > 0);
+    if (workOrderFilter.hasAbnormalReturn !== null) {
+      result = result.filter((o) => (o.rejectHistory && o.rejectHistory.length > 0) === workOrderFilter.hasAbnormalReturn);
     }
 
     return result;
