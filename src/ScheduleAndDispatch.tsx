@@ -69,7 +69,7 @@ export default function ScheduleAndDispatch({
   const pendingOrders = useMemo(() => {
     const assignedIds = new Set(assignments.map((a) => a.workOrderId));
     return workOrders
-      .filter((o) => o.status !== 'delivered' && !assignedIds.has(o.id))
+      .filter((o) => o.status !== 'customer_delivered' && !assignedIds.has(o.id))
       .sort((a, b) => {
         const aOverdue = getOverdueStatus(a);
         const bOverdue = getOverdueStatus(b);
@@ -441,7 +441,7 @@ export default function ScheduleAndDispatch({
   const BoardView = () => (
     <div className="dispatch-board-view">
       <div className="board-columns">
-        {technicianWorkload.map(({ technician, assignments: techAssignments, totalMinutes, effectiveCapacity, loadPercent, isOverloaded }) => {
+        {technicianWorkload.map(({ technician, assignments: techAssignments, assignmentsWithCapacityInfo, totalMinutes, effectiveCapacity, remainingCapacity, loadPercent, isOverloaded }) => {
           const displayStatus = isOverloaded ? 'overloaded' : technician.status;
           const statusConfig = TECHNICIAN_STATUS_CONFIG[displayStatus];
 
@@ -550,7 +550,7 @@ export default function ScheduleAndDispatch({
       );
     }
 
-    const { technician, assignments: techAssignments, totalMinutes, effectiveCapacity, loadPercent, isOverloaded } = selected;
+    const { technician, assignments: techAssignments, assignmentsWithCapacityInfo, totalMinutes, effectiveCapacity, remainingCapacity, loadPercent, isOverloaded } = selected;
     const skillConfig = SKILL_LEVEL_CONFIG[technician.skillLevel];
 
     return (

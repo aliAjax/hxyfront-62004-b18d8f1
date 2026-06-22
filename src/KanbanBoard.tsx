@@ -68,7 +68,7 @@ export default function KanbanBoard({ orders, assignments = [], technicians = []
   };
 
   const totalCount = orders.length;
-  const deliveredCount = orders.filter((o) => o.status === 'delivered').length;
+  const deliveredCount = orders.filter((o) => o.status === 'customer_delivered').length;
   const inProgressCount = totalCount - deliveredCount;
 
   return (

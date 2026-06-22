@@ -116,7 +116,8 @@ export default function WorkOrderForm({ onSubmit, selectedEdgeParam, historyFill
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof WorkOrderFormData, string>> = {};
     REQUIRED_FIELDS.forEach((field) => {
-      if (!formData[field].trim()) {
+      const value = formData[field];
+      if (typeof value === 'string' && !value.trim()) {
         newErrors[field] = `${FIELD_LABELS[field]}为必填项`;
       }
     });
@@ -151,6 +152,7 @@ export default function WorkOrderForm({ onSubmit, selectedEdgeParam, historyFill
   const renderField = (field: keyof WorkOrderFormData, type: 'text' | 'select' | 'textarea', options?: string[]) => {
     const isRequired = REQUIRED_FIELDS.includes(field);
     const error = errors[field];
+    const value = formData[field] as string;
 
     if (type === 'textarea') {
       return (
@@ -160,7 +162,7 @@ export default function WorkOrderForm({ onSubmit, selectedEdgeParam, historyFill
             {isRequired && <em className="required">*</em>}
           </span>
           <textarea
-            value={formData[field]}
+            value={value}
             onChange={(e) => handleChange(field, e.target.value)}
             placeholder={`请填写${FIELD_LABELS[field]}`}
             rows={3}
@@ -178,7 +180,7 @@ export default function WorkOrderForm({ onSubmit, selectedEdgeParam, historyFill
             {isRequired && <em className="required">*</em>}
           </span>
           <select
-            value={formData[field]}
+            value={value}
             onChange={(e) => handleChange(field, e.target.value)}
           >
             <option value="">请选择{FIELD_LABELS[field]}</option>
@@ -201,7 +203,7 @@ export default function WorkOrderForm({ onSubmit, selectedEdgeParam, historyFill
         </span>
         <input
           type="text"
-          value={formData[field]}
+          value={value}
           onChange={(e) => handleChange(field, e.target.value)}
           placeholder={`请填写${FIELD_LABELS[field]}`}
         />

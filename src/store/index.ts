@@ -325,7 +325,7 @@ class WorkOrderStore {
       if (canEditField(currentPhase, field)) {
         const oldValue = order[field as keyof WorkOrder];
         if (JSON.stringify(oldValue) !== JSON.stringify(value)) {
-          validUpdates[field as keyof WorkOrder] = value;
+          (validUpdates as any)[field] = value;
           fieldChanges.push({
             id: `FC-${orderId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             field,
@@ -620,7 +620,7 @@ class WorkOrderStore {
     const order = this.workOrders.find((o) => o.id === orderId);
     if (!order) return undefined;
 
-    if (targetStatus === 'delivered') {
+    if (targetStatus === 'customer_delivered') {
       if (!order.qualityChecklist) {
         throw new Error('请先完成质检检查清单后再交付');
       }
@@ -651,7 +651,7 @@ class WorkOrderStore {
     this.workOrders[index] = updated;
     this.workOrders = [...this.workOrders];
 
-    if (targetStatus === 'delivered') {
+    if (targetStatus === 'customer_delivered') {
       this.syncOrderToCustomerHistory(updated);
       this.assignments = this.assignments.filter((a) => a.workOrderId !== orderId);
       this.persistImmediate(STORAGE_KEYS.ASSIGNMENTS, this.assignments);
@@ -665,20 +665,12 @@ class WorkOrderStore {
   }
 
   advanceStatus(orderId: string): WorkOrder | undefined {
-    const order = this.workOrders.find((o) => o.id === orderId);
-    if (!order) return undefined;
-
-    const statusOrder: WorkOrderStatus[] = [
-      'pending_inspection',
-      'pending_wax',
-      'pending_base_repair',
-      'pending_qa',
-      'delivered',
-    ];
-    const currentIndex = statusOrder.indexOf(order.status);
-    const nextIndex = (currentIndex + 1) % statusOrder.length;
-
-    return this.transitionStatus(orderId, statusOrder[nextIndex]);
+    try {
+      return this.transitionToNextPhase(orderId);
+    } catch (e) {
+      alert((e as Error).message);
+      return undefined;
+    }
   }
 
   addDamageMark(orderId: string, mark: Omit<BaseDamageMark, 'id'>): WorkOrder | undefined {

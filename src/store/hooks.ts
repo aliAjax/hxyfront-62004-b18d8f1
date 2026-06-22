@@ -179,6 +179,7 @@ export function useWorkOrderActions() {
           return undefined;
         }
       },
+      get: (id: string) => workOrderStore.getWorkOrderById(id),
       getStatistics: () => workOrderStore.getWorkOrderStatistics(),
     }),
     []

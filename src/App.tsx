@@ -230,8 +230,7 @@ function App() {
 
   const handlePhaseEditorApplyQuote = useCallback((summary: QuoteSummary) => {
     if (!phaseEditorOrder) return;
-    orderActions.applyQuote(phaseEditorOrder.id, summary);
-    const updated = orderActions.get(phaseEditorOrder.id);
+    const updated = orderActions.applyQuote(phaseEditorOrder.id, summary);
     if (updated) {
       setPhaseEditorOrder(updated);
     }
@@ -256,7 +255,7 @@ function App() {
   const assignmentStats = useMemo(() => {
     const assignedCount = assignments.length;
     const pendingAssign = orders.filter(
-      (o) => o.status !== 'delivered' && !assignments.some((a) => a.workOrderId === o.id)
+      (o) => o.status !== 'customer_delivered' && !assignments.some((a) => a.workOrderId === o.id)
     ).length;
 
     const totalAssignedMinutes = assignments.reduce((sum, a) => sum + a.estimatedMinutes, 0);

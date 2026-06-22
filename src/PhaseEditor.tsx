@@ -17,6 +17,7 @@ import {
   REPAIR_METHODS,
   EditableField,
   FieldChangeRecord,
+  BaseDamageMark,
   getNextPhase,
 } from './types';
 import BaseDamageMarker from './BaseDamageMarker';
@@ -346,7 +347,7 @@ export default function PhaseEditor({
               <h4 className="subsection-title">损伤标记</h4>
               <BaseDamageMarker
                 marks={order.damageMarks}
-                onMarksChange={(marks) => handleFieldChange('damageMarks', marks)}
+                onChange={(marks: BaseDamageMark[]) => handleFieldChange('damageMarks', marks)}
               />
             </div>
           )}

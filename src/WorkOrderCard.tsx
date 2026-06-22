@@ -176,7 +176,7 @@ export default function WorkOrderCard({ order, onDragStart, onDragEnd, onViewHis
         </div>
       )}
 
-      {!technician && order.status !== 'delivered' && (
+      {!technician && order.status !== 'customer_delivered' && (
         <div className="kanban-card-unassigned">
           <span>⚠️ 未分配技师</span>
         </div>

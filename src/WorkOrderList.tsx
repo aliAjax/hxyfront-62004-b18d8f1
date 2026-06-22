@@ -122,7 +122,7 @@ export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, edi
                   </div>
                 )}
 
-                {!technician && order.status !== 'delivered' && (
+                {!technician && order.status !== 'customer_delivered' && (
                   <p className="record-note unassigned-note">
                     ⚠️ 该工单尚未分配技师，请前往排班与分配模块进行分配
                   </p>

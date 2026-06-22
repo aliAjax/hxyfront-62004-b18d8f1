@@ -19,10 +19,23 @@ export type EditableField =
   | 'repairLocation'
   | 'customerPreference'
   | 'damageMarks'
+  | 'damageSummary'
+  | 'damageLevel'
   | 'riskWarning'
   | 'estimatedDelivery'
   | 'quoteSummary'
-  | 'qualityChecklist';
+  | 'quoteItems'
+  | 'discount'
+  | 'rushService'
+  | 'technicianNotes'
+  | 'workStartTime'
+  | 'workEndTime'
+  | 'qualityChecklist'
+  | 'qaOverallNote'
+  | 'qaInspector'
+  | 'deliveryNote'
+  | 'paymentMethod'
+  | 'customerFeedback';
 
 export interface PhaseFieldConfig {
   phase: WorkOrderPhase;
@@ -172,10 +185,23 @@ export const FIELD_LABELS: Record<EditableField, string> = {
   repairLocation: '修补位置',
   customerPreference: '客户偏好',
   damageMarks: '损伤标记',
+  damageSummary: '损伤总结',
+  damageLevel: '损伤等级',
   riskWarning: '风险提示',
   estimatedDelivery: '预计交付日期',
   quoteSummary: '报价明细',
+  quoteItems: '报价项目',
+  discount: '折扣',
+  rushService: '加急服务',
+  technicianNotes: '技师备注',
+  workStartTime: '施工开始时间',
+  workEndTime: '施工结束时间',
   qualityChecklist: '质检清单',
+  qaOverallNote: '质检总体备注',
+  qaInspector: '质检员',
+  deliveryNote: '交付备注',
+  paymentMethod: '付款方式',
+  customerFeedback: '客户反馈',
 };
 
 export interface PhaseTransitionResult {
@@ -829,12 +855,12 @@ export const initialWorkOrders: WorkOrder[] = [
       },
       {
         id: 'FC-131-2',
-        field: 'repairMethod',
-        oldValue: 'P-Tex填充',
-        newValue: '整块更换',
+        field: 'damageSummary',
+        oldValue: '',
+        newValue: '板尾严重烧伤，需整块更换',
         changedAt: '2024-01-17 11:30',
         changedBy: '陈技师',
-        note: '因烧伤严重，升级修补方案为整块更换',
+        note: '因烧伤严重，升级修补方案',
       },
     ],
     rejectHistory: [
@@ -1407,7 +1433,7 @@ export const calculateEstimatedMinutes = (workOrder: WorkOrder): number => {
 };
 
 export const calculateComplexityScore = (workOrder: WorkOrder): number => {
-  const baseScore = workOrder.status === 'pending_base_repair' ? 3 : workOrder.status === 'pending_wax' ? 2 : 1;
+  const baseScore = workOrder.status === 'technician_work' ? 3 : workOrder.status === 'damage_assessment' ? 2 : 1;
   const damageScore = workOrder.damageMarks.reduce((sum, mark) => {
     const severityScore = mark.severity === 'severe' ? 3 : mark.severity === 'moderate' ? 2 : 1;
     return sum + severityScore;
