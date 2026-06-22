@@ -1076,6 +1076,53 @@ class WorkOrderStore {
     URL.revokeObjectURL(url);
   }
 
+  exportSummaryToJSON(orderIds: string[]): string {
+    const selectedOrders = this.workOrders.filter((o) => orderIds.includes(o.id));
+    
+    const summary = selectedOrders.map((order) => {
+      const statusConfig = STATUS_CONFIG.find((s) => s.value === order.status);
+      const assignment = this.assignments.find((a) => a.workOrderId === order.id);
+      const technician = assignment ? this.technicians.find((t) => t.id === assignment.technicianId) : undefined;
+
+      return {
+        工单编号: order.id,
+        客户偏好: order.customerPreference || '-',
+        当前阶段: statusConfig?.label || order.status,
+        报价: order.quoteSummary ? `¥${order.quoteSummary.finalTotal}` : '待报价',
+        技师: technician?.name || '未分配',
+        预计交付: order.estimatedDelivery || '-',
+        风险提示: order.riskWarning || '无',
+      };
+    });
+
+    const result = {
+      导出时间: WorkOrderStore.formatTimestamp(),
+      工单数: summary.length,
+      工单摘要: summary,
+    };
+
+    return JSON.stringify(result, null, 2);
+  }
+
+  downloadSummary(orderIds: string[], filename?: string): void {
+    if (orderIds.length === 0) {
+      throw new Error('请先选择要导出的工单');
+    }
+
+    this.flushPendingWrites();
+
+    const data = this.exportSummaryToJSON(orderIds);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename ?? `hxy-summary-${WorkOrderStore.formatDate().replace(/-/g, '')}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   importFromJSON(jsonString: string, mode: 'merge' | 'replace' = 'merge'): StoreSnapshot {
     let parsed: unknown;
     try {

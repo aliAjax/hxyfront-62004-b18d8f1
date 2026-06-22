@@ -10,6 +10,11 @@ interface WorkOrderListProps {
   onOpenPhaseEditor?: (order: WorkOrder) => void;
   assignments?: WorkOrderAssignment[];
   technicians?: Technician[];
+  selectedOrderIds: string[];
+  onToggleSelect: (orderId: string) => void;
+  onSelectAll: () => void;
+  onClearSelection: () => void;
+  onExportSummary: () => void;
 }
 
 const getStatusInfo = (status: string) => {
@@ -26,7 +31,18 @@ const getDamageTypeLabel = (type: string) =>
 const getSeverityLabel = (sev: string) =>
   SEVERITY_LEVELS.find((s) => s.value === sev)?.label ?? sev;
 
-export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, editingOrderId, onOpenQuote, onOpenQa, onOpenPhaseEditor, assignments = [], technicians = [] }: WorkOrderListProps) {
+export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, editingOrderId, onOpenQuote, onOpenQa, onOpenPhaseEditor, assignments = [], technicians = [], selectedOrderIds, onToggleSelect, onSelectAll, onClearSelection, onExportSummary }: WorkOrderListProps) {
+  const allSelected = orders.length > 0 && selectedOrderIds.length === orders.length;
+  const someSelected = selectedOrderIds.length > 0 && selectedOrderIds.length < orders.length;
+
+  const handleExportClick = () => {
+    if (selectedOrderIds.length === 0) {
+      alert('请先选择要导出的工单');
+      return;
+    }
+    onExportSummary();
+  };
+
   return (
     <section className="panel">
       <div className="heading">
@@ -34,7 +50,57 @@ export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, edi
           <p>历史记录</p>
           <h2>近期工单</h2>
         </div>
-        <button>导出摘要</button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {selectedOrderIds.length > 0 && (
+            <span style={{ fontSize: 13, color: '#64748b' }}>
+              已选 {selectedOrderIds.length} 项
+            </span>
+          )}
+          <button
+            onClick={onSelectAll}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 6,
+              border: '1px solid #94a3b8',
+              background: 'transparent',
+              color: '#475569',
+              cursor: 'pointer',
+              fontSize: 13,
+            }}
+          >
+            {allSelected ? '取消全选' : '全选'}
+          </button>
+          {selectedOrderIds.length > 0 && (
+            <button
+              onClick={onClearSelection}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 6,
+                border: '1px solid #64748b',
+                background: 'transparent',
+                color: '#64748b',
+                cursor: 'pointer',
+                fontSize: 13,
+              }}
+            >
+              清空选择
+            </button>
+          )}
+          <button
+            onClick={handleExportClick}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 6,
+              border: 'none',
+              background: selectedOrderIds.length > 0 ? '#0ea5e9' : '#cbd5e1',
+              color: 'white',
+              cursor: selectedOrderIds.length > 0 ? 'pointer' : 'not-allowed',
+              fontSize: 13,
+            }}
+          >
+            📤 导出摘要
+          </button>
+        </div>
       </div>
       <div className="records">
         {orders.map((order, index) => {
@@ -44,13 +110,31 @@ export default function WorkOrderList({ orders, onEditOrder, onToggleStatus, edi
           const assignment = assignments.find((a) => a.workOrderId === order.id);
           const technician = assignment ? technicians.find((t) => t.id === assignment.technicianId) : undefined;
 
+          const isSelected = selectedOrderIds.includes(order.id);
+
           return (
             <article
               key={order.id}
               className={isEditing ? 'editing' : ''}
-              style={isEditing ? { boxShadow: '0 0 0 2px var(--primary), 0 4px 16px rgba(31, 41, 55, 0.08)' } : undefined}
+              style={{
+                ...(isEditing ? { boxShadow: '0 0 0 2px var(--primary), 0 4px 16px rgba(31, 41, 55, 0.08)' } : undefined),
+                ...(isSelected ? { boxShadow: '0 0 0 2px #0ea5e9, 0 4px 16px rgba(14, 165, 233, 0.15)' } : undefined),
+              }}
             >
-              <b>{String(index + 1).padStart(2, '0')}</b>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => onToggleSelect(order.id)}
+                  style={{
+                    width: 18,
+                    height: 18,
+                    cursor: 'pointer',
+                    accentColor: '#0ea5e9',
+                  }}
+                />
+                <b>{String(index + 1).padStart(2, '0')}</b>
+              </div>
               <div className="record-content">
                 <div className="record-header">
                   <h3>{order.id}</h3>

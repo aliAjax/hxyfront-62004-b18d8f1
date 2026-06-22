@@ -241,6 +241,15 @@ export function useDataIO() {
     () => ({
       exportJSON: () => workOrderStore.exportToJSON(),
       downloadJSON: (filename?: string) => workOrderStore.downloadJSON(filename),
+      exportSummaryJSON: (orderIds: string[]) => workOrderStore.exportSummaryToJSON(orderIds),
+      downloadSummary: (orderIds: string[], filename?: string) => {
+        try {
+          workOrderStore.downloadSummary(orderIds, filename);
+        } catch (e) {
+          alert((e as Error).message);
+          throw e;
+        }
+      },
       importJSON: (jsonString: string, mode: 'merge' | 'replace' = 'merge'): StoreSnapshot => {
         try {
           return workOrderStore.importFromJSON(jsonString, mode);

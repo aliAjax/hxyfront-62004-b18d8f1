@@ -84,6 +84,7 @@ function App() {
   const [quoteTargetOrderId, setQuoteTargetOrderId] = useState<string | null>(null);
   const [phaseEditorOrder, setPhaseEditorOrder] = useState<WorkOrder | null>(null);
   const [relatedHistoryOpen, setRelatedHistoryOpen] = useState(false);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const quoteSectionRef = useRef<HTMLDivElement>(null);
   const qaSectionRef = useRef<HTMLDivElement>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
@@ -448,6 +449,31 @@ function App() {
     }
   };
 
+  const handleToggleSelectOrder = (orderId: string) => {
+    setSelectedOrderIds((prev) =>
+      prev.includes(orderId) ? prev.filter((id) => id !== orderId) : [...prev, orderId]
+    );
+  };
+
+  const handleSelectAllOrders = () => {
+    const allOrderIds = filteredOrders.map((o) => o.id);
+    const allSelected = selectedOrderIds.length === allOrderIds.length && allOrderIds.length > 0;
+    setSelectedOrderIds(allSelected ? [] : allOrderIds);
+  };
+
+  const handleClearSelection = () => {
+    setSelectedOrderIds([]);
+  };
+
+  const handleExportSummary = () => {
+    if (selectedOrderIds.length === 0) {
+      alert('请先选择要导出的工单');
+      return;
+    }
+    dataIO.downloadSummary(selectedOrderIds);
+    setSelectedOrderIds([]);
+  };
+
   if (!initialized) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
@@ -772,6 +798,11 @@ function App() {
         assignments={assignments}
         technicians={technicians}
         onOpenPhaseEditor={handleOpenPhaseEditor}
+        selectedOrderIds={selectedOrderIds}
+        onToggleSelect={handleToggleSelectOrder}
+        onSelectAll={handleSelectAllOrders}
+        onClearSelection={handleClearSelection}
+        onExportSummary={handleExportSummary}
       />
 
       <div ref={phaseEditorRef}>
