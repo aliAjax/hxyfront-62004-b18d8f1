@@ -9,6 +9,7 @@ import StatusHistoryModal from './StatusHistoryModal';
 import QuoteEstimator from './QuoteEstimator';
 import ScheduleAndDispatch from './ScheduleAndDispatch';
 import PhaseEditor from './PhaseEditor';
+import RelatedHistoryModal from './RelatedHistoryModal';
 import {
   WorkOrder,
   WorkOrderFormData,
@@ -82,6 +83,7 @@ function App() {
   const [selectedQaOrder, setSelectedQaOrder] = useState<WorkOrder | null>(null);
   const [quoteTargetOrderId, setQuoteTargetOrderId] = useState<string | null>(null);
   const [phaseEditorOrder, setPhaseEditorOrder] = useState<WorkOrder | null>(null);
+  const [relatedHistoryOpen, setRelatedHistoryOpen] = useState(false);
   const quoteSectionRef = useRef<HTMLDivElement>(null);
   const qaSectionRef = useRef<HTMLDivElement>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
@@ -252,6 +254,46 @@ function App() {
     const checklist = orderActions.createQualityChecklist(phaseEditorOrder.id);
     if (checklist) {
       setPhaseEditorOrder((prev) => (prev ? { ...prev, qualityChecklist: checklist } : null));
+    }
+  }, [phaseEditorOrder, orderActions]);
+
+  const handleOpenRelatedHistory = useCallback(() => {
+    setRelatedHistoryOpen(true);
+  }, []);
+
+  const handleCloseRelatedHistory = useCallback(() => {
+    setRelatedHistoryOpen(false);
+  }, []);
+
+  const handleSelectRelatedHistory = useCallback((record: CustomerHistoryRecord | WorkOrder) => {
+    if (!phaseEditorOrder) return;
+
+    const isWorkOrder = 'status' in record;
+    let updates: Partial<WorkOrder> = {};
+
+    if (isWorkOrder) {
+      const wo = record as WorkOrder;
+      updates = {
+        boardType: wo.boardType,
+        sideEdgeAngle: wo.sideEdgeAngle,
+        baseEdgeAngle: wo.baseEdgeAngle,
+        waxType: wo.waxType,
+        customerPreference: wo.customerPreference,
+      };
+    } else {
+      const chr = record as CustomerHistoryRecord;
+      updates = {
+        boardType: chr.boardType,
+        sideEdgeAngle: chr.sideEdgeAngle,
+        baseEdgeAngle: chr.baseEdgeAngle,
+        waxType: chr.waxType,
+        customerPreference: chr.deliveryNote,
+      };
+    }
+
+    const result = orderActions.updateFields(phaseEditorOrder.id, updates);
+    if (result) {
+      setPhaseEditorOrder(result);
     }
   }, [phaseEditorOrder, orderActions]);
 
@@ -733,11 +775,23 @@ function App() {
               onApplyQuote={handlePhaseEditorApplyQuote}
               onUpdateQualityChecklist={handlePhaseEditorUpdateQaChecklist}
               onCreateQualityChecklist={handlePhaseEditorCreateQaChecklist}
+              onOpenRelatedHistory={handleOpenRelatedHistory}
               onClose={handleClosePhaseEditor}
             />
           </div>
         )}
       </div>
+
+      {phaseEditorOrder && (
+        <RelatedHistoryModal
+          isOpen={relatedHistoryOpen}
+          currentOrder={phaseEditorOrder}
+          historyRecords={customerHistory}
+          allWorkOrders={orders}
+          onClose={handleCloseRelatedHistory}
+          onSelectRecord={handleSelectRelatedHistory}
+        />
+      )}
 
       <StatusHistoryModal
         order={selectedHistoryOrder}

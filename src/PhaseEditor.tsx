@@ -33,6 +33,7 @@ interface PhaseEditorProps {
   onApplyQuote: (summary: any) => void;
   onUpdateQualityChecklist: (checklist: any) => void;
   onCreateQualityChecklist: () => void;
+  onOpenRelatedHistory?: () => void;
   onClose?: () => void;
 }
 
@@ -44,6 +45,7 @@ export default function PhaseEditor({
   onApplyQuote,
   onUpdateQualityChecklist,
   onCreateQualityChecklist,
+  onOpenRelatedHistory,
   onClose,
 }: PhaseEditorProps) {
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -425,6 +427,26 @@ export default function PhaseEditor({
         </div>
 
         <div className="phase-sidebar">
+          <div className="sidebar-section">
+            <h4 className="sidebar-title">快捷操作</h4>
+            <div className="action-buttons">
+              {onOpenRelatedHistory && (
+                <button
+                  className="secondary related-history-btn"
+                  onClick={onOpenRelatedHistory}
+                  style={{
+                    background: 'linear-gradient(135deg, #0ea5e9, #14b8a6)',
+                    color: 'white',
+                    border: 'none',
+                    fontWeight: 600,
+                  }}
+                >
+                  🔗 关联历史
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="sidebar-section">
             <h4 className="sidebar-title">阶段操作</h4>
             <div className="action-buttons">
