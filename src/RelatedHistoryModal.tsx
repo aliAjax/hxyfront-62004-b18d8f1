@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   CustomerHistoryRecord,
   WorkOrder,
@@ -44,6 +44,15 @@ const getDamageTypeLabel = (type: string) =>
 const getSeverityLabel = (sev: string) =>
   SEVERITY_LEVELS.find((s) => s.value === sev)?.label ?? sev;
 
+const buildMaintenanceItemsFromOrder = (order: WorkOrder) => {
+  const items: string[] = [];
+  if (order.sideEdgeAngle || order.baseEdgeAngle) items.push('修刃');
+  if (order.waxType && order.waxType !== '不打蜡') items.push('打蜡');
+  if (order.baseDamage && order.baseDamage !== '无') items.push('补底');
+  if (order.repairLocation) items.push('修补');
+  return items.join('、') || '常规维护';
+};
+
 export default function RelatedHistoryModal({
   isOpen,
   currentOrder,
@@ -54,6 +63,10 @@ export default function RelatedHistoryModal({
 }: RelatedHistoryModalProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!isOpen) setSelectedId(null);
+  }, [isOpen]);
+
   const customerName = currentOrder.customerName || '';
   const customerPhone = currentOrder.customerPhone || '';
 
@@ -62,13 +75,16 @@ export default function RelatedHistoryModal({
 
     const matchCustomer = (name: string, phone: string) => {
       if (!customerName && !customerPhone) return false;
-      const nameMatch = customerName && name && name.includes(customerName);
-      const phoneMatch = customerPhone && phone && phone.includes(customerPhone);
+      const nameMatch =
+        customerName && name && name.includes(customerName);
+      const phoneMatch =
+        customerPhone && phone && phone.includes(customerPhone);
       return nameMatch || phoneMatch;
     };
 
     historyRecords.forEach((record) => {
       if (matchCustomer(record.customerName, record.customerPhone)) {
+        const safeChecklist = record.qualityChecklist;
         items.push({
           id: record.id,
           source: 'history',
@@ -79,14 +95,14 @@ export default function RelatedHistoryModal({
           sideEdgeAngle: record.sideEdgeAngle,
           baseEdgeAngle: record.baseEdgeAngle,
           waxType: record.waxType,
-          customerPreference: record.deliveryNote,
+          customerPreference: record.deliveryNote || '',
           damageMarks: [],
           baseDamage: '',
           repairLocation: '',
-          maintenanceItems: record.maintenanceItems,
-          qualityChecklist: record.qualityChecklist,
-          qaOverallNote: record.qualityChecklist?.overallNote,
-          qaInspector: record.qualityChecklist?.inspectorName,
+          maintenanceItems: record.maintenanceItems || '',
+          qualityChecklist: safeChecklist || undefined,
+          qaOverallNote: safeChecklist?.overallNote,
+          qaInspector: safeChecklist?.inspectorName,
           originalRecord: record,
         });
       }
@@ -96,6 +112,7 @@ export default function RelatedHistoryModal({
       if (order.id === currentOrder.id) return;
       if (order.status !== 'customer_delivered') return;
       if (matchCustomer(order.customerName || '', order.customerPhone || '')) {
+        const safeChecklist = order.qualityChecklist;
         items.push({
           id: order.id,
           source: 'workorder',
@@ -106,35 +123,30 @@ export default function RelatedHistoryModal({
           sideEdgeAngle: order.sideEdgeAngle,
           baseEdgeAngle: order.baseEdgeAngle,
           waxType: order.waxType,
-          customerPreference: order.customerPreference,
-          damageMarks: order.damageMarks || [],
-          baseDamage: order.baseDamage,
-          repairLocation: order.repairLocation,
-          maintenanceItems: buildMaintenanceItems(order),
-          qualityChecklist: order.qualityChecklist,
-          qaOverallNote: order.qualityChecklist?.overallNote,
-          qaInspector: order.qualityChecklist?.inspectorName,
+          customerPreference: order.customerPreference || '',
+          damageMarks: Array.isArray(order.damageMarks)
+            ? order.damageMarks
+            : [],
+          baseDamage: order.baseDamage || '',
+          repairLocation: order.repairLocation || '',
+          maintenanceItems: buildMaintenanceItemsFromOrder(order),
+          qualityChecklist: safeChecklist || undefined,
+          qaOverallNote: safeChecklist?.overallNote,
+          qaInspector: safeChecklist?.inspectorName,
           originalRecord: order,
         });
       }
     });
 
-    return items.sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
+    return items.sort((a, b) => {
+      const da = new Date(a.date).getTime() || 0;
+      const db = new Date(b.date).getTime() || 0;
+      return db - da;
+    });
   }, [historyRecords, allWorkOrders, currentOrder, customerName, customerPhone]);
 
-  const buildMaintenanceItems = (order: WorkOrder) => {
-    const items: string[] = [];
-    if (order.sideEdgeAngle || order.baseEdgeAngle) items.push('修刃');
-    if (order.waxType && order.waxType !== '不打蜡') items.push('打蜡');
-    if (order.baseDamage && order.baseDamage !== '无') items.push('补底');
-    if (order.repairLocation) items.push('修补');
-    return items.join('、') || '常规维护';
-  };
-
   const handleSelect = (item: HistoryItem) => {
-    setSelectedId(item.id);
+    setSelectedId((prev) => (prev === item.id ? null : item.id));
   };
 
   const handleConfirmApply = () => {
@@ -148,6 +160,13 @@ export default function RelatedHistoryModal({
   if (!isOpen) return null;
 
   const selectedItem = historyItems.find((i) => i.id === selectedId);
+
+  const safeQaCount = (item: HistoryItem) => {
+    const items = item.qualityChecklist?.items;
+    if (!Array.isArray(items)) return { passed: 0, total: 0 };
+    const passed = items.filter((i: any) => i.status === 'pass').length;
+    return { passed, total: items.length };
+  };
 
   return (
     <div className="modal-overlay related-history-overlay" onClick={onClose}>
@@ -186,15 +205,13 @@ export default function RelatedHistoryModal({
           <div className="related-history-content">
             <div className="related-history-list">
               {historyItems.map((item) => {
-                const hasQa = item.qualityChecklist !== undefined;
+                const hasQa =
+                  item.qualityChecklist !== undefined &&
+                  Array.isArray(item.qualityChecklist.items);
                 const qaCompleted = hasQa
-                  ? isQualityCheckCompleted(item.qualityChecklist)
+                  ? !!isQualityCheckCompleted(item.qualityChecklist)
                   : false;
-                const passedCount =
-                  item.qualityChecklist?.items.filter(
-                    (i: any) => i.status === 'pass'
-                  ).length ?? 0;
-                const totalQaCount = item.qualityChecklist?.items.length ?? 0;
+                const qaCount = safeQaCount(item);
 
                 return (
                   <div
@@ -205,10 +222,8 @@ export default function RelatedHistoryModal({
                     onClick={() => handleSelect(item)}
                   >
                     <div className="rh-card-header">
-                      <div className="rh-date-badge">
-                        📅 {item.date}
-                      </div>
-                      <div style={{ display: 'flex', gap: 6 }}>
+                      <div className="rh-date-badge">📅 {item.date}</div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         <span
                           className="rh-source-tag"
                           style={{
@@ -229,17 +244,30 @@ export default function RelatedHistoryModal({
                             }}
                           >
                             {qaCompleted
-                              ? `✓ 质检${passedCount}/${totalQaCount}`
+                              ? `✓ 质检${qaCount.passed}/${qaCount.total}`
                               : '⏳ 质检中'}
                           </span>
                         )}
-                        <span className="rh-board-tag">{item.boardType}</span>
+                        {item.boardType && (
+                          <span className="rh-board-tag">{item.boardType}</span>
+                        )}
+                        {item.damageMarks.length > 0 && (
+                          <span
+                            className="rh-board-tag"
+                            style={{
+                              background: '#fef2f2',
+                              color: '#b91c1c',
+                            }}
+                          >
+                            🩹 {item.damageMarks.length}处损伤
+                          </span>
+                        )}
                       </div>
                     </div>
 
                     <div className="rh-card-main">
                       <strong className="rh-board-info">
-                        {item.brand} · {item.length}cm
+                        {item.brand || '-'} · {item.length || '-'}cm
                       </strong>
                       {item.maintenanceItems && (
                         <span className="rh-items-text">
@@ -251,15 +279,21 @@ export default function RelatedHistoryModal({
                     <div className="rh-card-params">
                       <div className="rh-param">
                         <span className="rh-param-label">侧刃</span>
-                        <span className="rh-param-value">{item.sideEdgeAngle || '-'}</span>
+                        <span className="rh-param-value">
+                          {item.sideEdgeAngle || '-'}
+                        </span>
                       </div>
                       <div className="rh-param">
                         <span className="rh-param-label">底刃</span>
-                        <span className="rh-param-value">{item.baseEdgeAngle || '-'}</span>
+                        <span className="rh-param-value">
+                          {item.baseEdgeAngle || '-'}
+                        </span>
                       </div>
                       <div className="rh-param">
                         <span className="rh-param-label">蜡型</span>
-                        <span className="rh-param-value">{item.waxType || '-'}</span>
+                        <span className="rh-param-value">
+                          {item.waxType || '-'}
+                        </span>
                       </div>
                     </div>
 
@@ -267,8 +301,12 @@ export default function RelatedHistoryModal({
                       <div className="rh-card-detail">
                         {item.customerPreference && (
                           <div className="rh-detail-section">
-                            <span className="rh-detail-label">💬 客户偏好/备注：</span>
-                            <span className="rh-detail-text">{item.customerPreference}</span>
+                            <span className="rh-detail-label">
+                              💬 客户偏好/备注：
+                            </span>
+                            <span className="rh-detail-text">
+                              {item.customerPreference}
+                            </span>
                           </div>
                         )}
 
@@ -282,7 +320,7 @@ export default function RelatedHistoryModal({
                                 );
                                 return (
                                   <span
-                                    key={mark.id}
+                                    key={mark.id || mark.type + mark.length}
                                     className="rh-damage-tag"
                                     style={{
                                       background:
@@ -292,9 +330,12 @@ export default function RelatedHistoryModal({
                                         (typeInfo?.color ?? '#64748b') + '30',
                                     }}
                                   >
-                                    {typeInfo?.icon} {getDamageTypeLabel(mark.type)}
+                                    {typeInfo?.icon || '🩹'}{' '}
+                                    {getDamageTypeLabel(mark.type)}
                                     <em>{mark.length}cm</em>
-                                    <small>· {getSeverityLabel(mark.severity)}</small>
+                                    <small>
+                                      · {getSeverityLabel(mark.severity)}
+                                    </small>
                                   </span>
                                 );
                               })}
@@ -305,9 +346,14 @@ export default function RelatedHistoryModal({
                         {item.baseDamage && item.baseDamage !== '无' && (
                           <div className="rh-detail-section">
                             <span className="rh-detail-label">📝 底板描述：</span>
-                            <span className="rh-detail-text">{item.baseDamage}</span>
+                            <span className="rh-detail-text">
+                              {item.baseDamage}
+                            </span>
                             {item.repairLocation && (
-                              <span className="rh-detail-text"> · {item.repairLocation}</span>
+                              <span className="rh-detail-text">
+                                {' '}
+                                · {item.repairLocation}
+                              </span>
                             )}
                           </div>
                         )}
@@ -318,23 +364,41 @@ export default function RelatedHistoryModal({
                             <div className="rh-qa-items">
                               {item.qualityChecklist.items.map((qaItem: any) => {
                                 const icon =
-                                  QA_CHECK_ITEMS.find((q) => q.key === qaItem.key)
-                                    ?.icon ?? '📋';
+                                  QA_CHECK_ITEMS.find(
+                                    (q) => q.key === qaItem.key
+                                  )?.icon ?? '📋';
                                 return (
-                                  <div key={qaItem.id} className="rh-qa-item">
-                                    <span className="rh-qa-item-icon">{icon}</span>
-                                    <span className="rh-qa-item-label">{qaItem.label}</span>
-                                    <span
-                                      className={`rh-qa-item-status ${qaItem.status}`}
+                                  <div
+                                    key={qaItem.id || qaItem.key}
+                                    className="rh-qa-item"
+                                  >
+                                    <div
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 6,
+                                      }}
                                     >
-                                      {qaItem.status === 'pass'
-                                        ? '通过'
-                                        : qaItem.status === 'fail'
-                                        ? '不通过'
-                                        : '待检'}
-                                    </span>
+                                      <span className="rh-qa-item-icon">
+                                        {icon}
+                                      </span>
+                                      <span className="rh-qa-item-label">
+                                        {qaItem.label}
+                                      </span>
+                                      <span
+                                        className={`rh-qa-item-status ${qaItem.status}`}
+                                      >
+                                        {qaItem.status === 'pass'
+                                          ? '通过'
+                                          : qaItem.status === 'fail'
+                                          ? '不通过'
+                                          : '待检'}
+                                      </span>
+                                    </div>
                                     {qaItem.note && (
-                                      <p className="rh-qa-item-note">{qaItem.note}</p>
+                                      <p className="rh-qa-item-note">
+                                        {qaItem.note}
+                                      </p>
                                     )}
                                   </div>
                                 );
@@ -388,6 +452,34 @@ export default function RelatedHistoryModal({
                     <span>蜡型：</span>
                     <strong>{selectedItem.waxType || '-'}</strong>
                   </div>
+                  {selectedItem.baseDamage &&
+                    selectedItem.baseDamage !== '无' && (
+                      <div className="rh-preview-row">
+                        <span>底板描述：</span>
+                        <strong>{selectedItem.baseDamage}</strong>
+                      </div>
+                    )}
+                  {selectedItem.repairLocation && (
+                    <div className="rh-preview-row">
+                      <span>修补位置：</span>
+                      <strong>{selectedItem.repairLocation}</strong>
+                    </div>
+                  )}
+                  {selectedItem.damageMarks.length > 0 && (
+                    <div className="rh-preview-row full">
+                      <span>
+                        损伤标记 ({selectedItem.damageMarks.length}处)：
+                      </span>
+                      <strong className="multiline">
+                        {selectedItem.damageMarks
+                          .map(
+                            (m) =>
+                              `${getDamageTypeLabel(m.type)} ${m.length}cm`
+                          )
+                          .join('、')}
+                      </strong>
+                    </div>
+                  )}
                   <div className="rh-preview-row full">
                     <span>客户偏好：</span>
                     <strong className="multiline">
@@ -398,7 +490,10 @@ export default function RelatedHistoryModal({
                 <div className="rh-apply-warn">
                   ⚠️ 回填将覆盖当前工单中上述字段的已有内容
                 </div>
-                <button className="primary rh-apply-btn" onClick={handleConfirmApply}>
+                <button
+                  className="primary rh-apply-btn"
+                  onClick={handleConfirmApply}
+                >
                   🚀 确认应用到当前工单
                 </button>
               </div>

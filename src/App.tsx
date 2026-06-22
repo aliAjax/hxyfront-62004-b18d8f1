@@ -279,6 +279,11 @@ function App() {
         baseEdgeAngle: wo.baseEdgeAngle,
         waxType: wo.waxType,
         customerPreference: wo.customerPreference,
+        baseDamage: wo.baseDamage,
+        repairLocation: wo.repairLocation,
+        damageMarks: Array.isArray(wo.damageMarks)
+          ? wo.damageMarks.map((m) => ({ ...m, id: `hist-${m.id}-${Date.now()}` }))
+          : [],
       };
     } else {
       const chr = record as CustomerHistoryRecord;
